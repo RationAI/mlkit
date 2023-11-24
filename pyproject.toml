@@ -15,7 +15,8 @@ license = { file = "LICENSE" }
 dependencies = []
 
 [tool.pdm.dev-dependencies]
-dev = ["mypy", "pre-commit", "ruff", "pytest"]
+dev = ["mypy", "pre-commit", "ruff"]
+test = ["pytest"]
 
 
 #####################################
@@ -50,7 +51,9 @@ ignore_missing_imports = true
 fix = true
 line-length = 88
 target-version = "py311"
-extend-ignore = ["ERA001"]
+extend-ignore = [
+    "ERA001", # commented out code
+]
 
 [tool.ruff.lint]
 unfixable = [
