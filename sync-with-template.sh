@@ -17,7 +17,7 @@ fi
 
 # Add template remote
 git remote add template "${TEMPLATE_REPO}"
-git fetch template > /dev/null 2>&1
+git fetch template
 
 # Get last synced commit hash or fallback to the first commit
 if [ -s "${COMMIT_FILE}" ]
