@@ -53,7 +53,8 @@ mypy:
 pytest:
   stage: test
   script:
-    - pdm test --junitxml=report.xml
+    # Allow pytest to fail with exit code 5 (no tests collected)
+    - pdm test --junitxml=report.xml || ( exit_code=$?; [ $exit_code -eq 5 ] && exit 0 || exit $exit_code )
   artifacts:
     when: always
     reports:
