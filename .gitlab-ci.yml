@@ -3,6 +3,8 @@ default:
   before_script:
     - python --version ; pip --version # For debugging
     - pip install -q pdm
+    # allow pdm to install dependencies from gitlab
+    - git config --global url."https://${DEPLOY_TOKEN_USERNAME}:${DEPLOY_TOKEN_PASSWORD}@gitlab.ics.muni.cz/".insteadOf "ssh://git@gitlab.ics.muni.cz/"
     - pdm install --no-lock -q --skip=post_install # skip pre-commit hooks
 
   # Pip's cache doesn't store the python packages
