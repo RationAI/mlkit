@@ -1,32 +1,9 @@
-default:
-  image: python:3.11
-  before_script:
-    - python --version ; pip --version # For debugging
-    - pip install -q pdm
-    # allow pdm to install dependencies from gitlab
-    - git config --global url."https://${DEPLOY_TOKEN_USERNAME}:${DEPLOY_TOKEN_PASSWORD}@gitlab.ics.muni.cz/".insteadOf "ssh://git@gitlab.ics.muni.cz/"
-    - pdm install --no-lock -q --skip=post_install # skip pre-commit hooks
-
-  # Pip's cache doesn't store the python packages
-  # https://pip.pypa.io/en/stable/topics/caching/
-  cache:
-    paths:
-      - .cache/pip
-      - .venv
-
-# Change pip's cache directory to be inside the project directory since we can
-# only cache local items.
-variables:
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+include:
+  project: rationai/digital-pathology/templates/ci-templates
+  file:
+    - Pytest.gitlab-ci.yml
+    - Python-Lint.gitlab-ci.yml
 
 stages:
   - lint
   - test
-
-# Runs jobs only in merge request pipelines
-.merge_request_pipelines:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-include: .gitlab/ci/*.yml
