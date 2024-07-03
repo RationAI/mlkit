@@ -2,6 +2,7 @@ include:
   project: rationai/digital-pathology/templates/ci-templates
   file:
     - Python-Lint.gitlab-ci.yml
+    - MkDocs.gitlab-ci.yml
 
 stages:
   - lint
