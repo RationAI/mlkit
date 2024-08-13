@@ -1,26 +1,33 @@
+import logging
 import os
 import tempfile
 from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+import git
+import mlflow
 from hydra.core.hydra_config import HydraConfig
 from lightning.fabric.loggers.logger import rank_zero_experiment
 from lightning.pytorch import loggers
 from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
-from mlflow.utils.mlflow_tags import MLFLOW_PARENT_RUN_ID, MLFLOW_SOURCE_NAME
-from omegaconf import OmegaConf
-
-from rationai.mlkit.lightning.loggers.get_git_tags import get_git_tags
-
-
-if TYPE_CHECKING:
-    from mlflow import MlflowClient
+from mlflow import MlflowClient
+from mlflow.utils.mlflow_tags import (
+    MLFLOW_GIT_BRANCH,
+    MLFLOW_GIT_COMMIT,
+    MLFLOW_GIT_REPO_URL,
+    MLFLOW_PARENT_RUN_ID,
+    MLFLOW_SOURCE_NAME,
+)
+from omegaconf import DictConfig, OmegaConf
 
 
 MLFLOW_CHECKPOINT_PATH = "checkpoints"
 MLFLOW_CONSOLE_LOG = "console.log"
+
+
+log = logging.getLogger(__name__)
 
 
 class MLFlowLogger(loggers.MLFlowLogger):
@@ -28,6 +35,7 @@ class MLFlowLogger(loggers.MLFlowLogger):
         self,
         tags: dict[str, Any] | None = None,
         log_model: Literal[True, False, "all"] = "all",
+        log_system_metrics: bool = True,
         **kwargs: Any,
     ) -> None:
         tags = dict(tags or {})  # required because of omegaconf
@@ -38,37 +46,17 @@ class MLFlowLogger(loggers.MLFlowLogger):
             log_model=log_model,
             **kwargs,
         )
+        self.log_system_metrics = log_system_metrics
 
     @property
     @rank_zero_experiment
-    def experiment(self) -> "MlflowClient":
-        import ray
-        from ray import train
-        from ray.air.integrations.mlflow import setup_mlflow
+    def experiment(self) -> MlflowClient:
+        if not self._initialized:
+            exp = super().experiment
+            mlflow.start_run(self.run_id, log_system_metrics=self.log_system_metrics)
+            return exp
 
-        if not ray.is_initialized():
-            return super().experiment
-
-        if self._initialized:
-            return self._mlflow_client
-
-        mlflow = setup_mlflow(
-            tracking_uri=self._tracking_uri,
-            experiment_name=self._experiment_name,
-            artifact_location=self._artifact_location,
-            run_name=train.get_context().get_experiment_name(),
-            create_experiment_if_not_exists=True,
-            tags=self.tags,
-        )
-
-        _experiment = mlflow.get_experiment_by_name(self._experiment_name)
-        _run = mlflow.active_run()
-
-        self._experiment_id = _experiment.experiment_id if _experiment else None
-        self._run_id = _run.run_id if _run else None
-
-        self._initialized = True
-        return self._mlflow_client
+        return super().experiment
 
     @rank_zero_experiment
     def get_stream_logger(self) -> Callable[[str], None]:
@@ -80,19 +68,18 @@ class MLFlowLogger(loggers.MLFlowLogger):
             else None
         )
 
-    def log_config(self, config: dict[str, Any]) -> None:
+    def log_config(self, config: DictConfig) -> None:
         """Logs the configuration to MLFlow."""
-        with tempfile.TemporaryDirectory(
-            prefix="test", suffix="test", dir=os.getcwd()
-        ) as tmp_dir:
-            with open(f"{tmp_dir}/hydra.yaml", "w") as tmp_file_config:
-                OmegaConf.save(HydraConfig.get(), tmp_file_config)
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp_dir_str:
+            tmp_dir = Path(tmp_dir_str)
+            with open(tmp_dir / "hydra.yaml", "w", encoding="utf-8") as file:
+                OmegaConf.save(HydraConfig.get(), file)
 
-            with open(f"{tmp_dir}/config.yaml", "w") as tmp_file_config:
-                OmegaConf.save(config, tmp_file_config)
+            with open(tmp_dir / "config.yaml", "w", encoding="utf-8") as file:
+                OmegaConf.save(config, file)
 
-            with open(f"{tmp_dir}/config-resolved.yaml", "w") as tmp_file_config:
-                OmegaConf.save(config, tmp_file_config, resolve=True)
+            with open(tmp_dir / "config-resolved.yaml", "w", encoding="utf-8") as file:
+                OmegaConf.save(config, file, resolve=True)
 
             self.experiment.log_artifacts(self._run_id, tmp_dir, "configs")
 
@@ -165,3 +152,17 @@ class MLFlowLogger(loggers.MLFlowLogger):
         self.experiment.log_table(
             data=data, artifact_file=artifact_file, run_id=self.run_id
         )
+
+
+def get_git_tags() -> dict[str, Any]:
+    repo = git.Repo(path=os.getenv("ORIG_WORKING_DIR", os.getcwd()))
+    if repo.head.is_detached:
+        log.warning("Cannot get git branch ('detached HEAD' state)")
+
+    return {
+        MLFLOW_GIT_COMMIT: repo.head.commit.hexsha,
+        MLFLOW_GIT_REPO_URL: repo.remotes.origin.url,  # not in the UI
+        "git.repo_url": repo.remotes.origin.url,
+        MLFLOW_GIT_BRANCH: repo.active_branch.name,  # not in the UI
+        "git.branch": repo.active_branch.name,
+    }

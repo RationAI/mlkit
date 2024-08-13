@@ -10,7 +10,7 @@ class StreamModifier:
     def __init__(self, stream: TextIO, id: int) -> None:
         self.stream = stream
         self.id = id
-        self.originals: dict[str, Callable[...]] = {}
+        self.originals: dict[str, Callable[..., None]] = {}
 
     def __del__(self) -> None:
         self.teardown()
