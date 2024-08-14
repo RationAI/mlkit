@@ -1,12 +1,12 @@
 import logging
 import os
 import tempfile
-from functools import wraps
+from collections.abc import Callable
 from pathlib import Path
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
-from lightning.pytorch.loggers import MLFlowLogger
+from lightning.pytorch.loggers import Logger, MLFlowLogger
 from omegaconf import DictConfig, OmegaConf
 
 from rationai.mlkit.stream import StreamCapture, StreamLogger
@@ -15,11 +15,10 @@ from rationai.mlkit.stream import StreamCapture, StreamLogger
 log = logging.getLogger(__name__)
 
 
-def loget(func):
+def loget(func: Callable[[DictConfig, Logger], None]) -> Callable[[DictConfig], None]:
     """Decorator for logging the hydra configuration files and std streams using the logger specified in the configuration."""
 
-    @wraps(func)
-    def wrapper(config: DictConfig) -> DictConfig:
+    def wrapper(config: DictConfig) -> None:
         logger = hydra.utils.instantiate(config.logger)
 
         # Save the configuration
@@ -45,7 +44,7 @@ def loget(func):
         # Capture the output
         if isinstance(logger, StreamLogger):
             with StreamCapture(logger):
-                return func(config, logger)
+                return func(config, logger)  # type: ignore[return-value]
 
         log.warning(
             "The %s logger is not supported for logging the std streams", logger
