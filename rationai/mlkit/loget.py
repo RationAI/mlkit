@@ -2,6 +2,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Callable
+from functools import wraps
 from pathlib import Path
 
 import hydra
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 def loget(func: Callable[[DictConfig, Logger], None]) -> Callable[[DictConfig], None]:
     """Decorator for logging the hydra configuration files and std streams using the logger specified in the configuration."""
 
+    @wraps(func)
     def wrapper(config: DictConfig) -> None:
         logger = hydra.utils.instantiate(config.logger)
 
