@@ -46,7 +46,7 @@ def loget(func: Callable[[DictConfig, Logger], None]) -> Callable[[DictConfig], 
         # Capture the output
         if isinstance(logger, StreamLogger):
             with StreamCapture(logger):
-                return func(config, logger)  # type: ignore[return-value]
+                return func(config, logger)  # type: ignore[arg-type]
 
         log.warning(
             "The %s logger is not supported for logging the std streams", logger
