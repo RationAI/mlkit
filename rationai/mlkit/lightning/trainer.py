@@ -10,6 +10,15 @@ ARTIFACTS_DOWNLOAD_PATH = "mlflow_artifacts/checkpoints"
 
 
 class Trainer(pl.Trainer):
+    def __init__(self, *args, **kwargs):
+        """A wrapper around the lightning.Trainer class that allows for callbacks to be passed as a dict.
+
+        This allows simpler callbacks configuration using Hydra
+        """
+        if "callbacks" in kwargs and isinstance(kwargs["callbacks"], dict):
+            kwargs["callbacks"] = list(kwargs["callbacks"].values())
+        super().__init__(*args, **kwargs)
+
     def _run(
         self, model: pl.LightningModule, ckpt_path: _PATH | None = None
     ) -> _EVALUATE_OUTPUT | _PREDICT_OUTPUT | None:
