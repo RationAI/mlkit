@@ -1,14 +1,13 @@
 import logging
 import os
-import tempfile
-from collections.abc import Callable
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Literal
 
 import git
+import git.exc
+import hydra
 import mlflow
-from hydra.core.hydra_config import HydraConfig
 from lightning.fabric.loggers.logger import rank_zero_experiment
 from lightning.pytorch import loggers
 from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
@@ -20,7 +19,8 @@ from mlflow.utils.mlflow_tags import (
     MLFLOW_PARENT_RUN_ID,
     MLFLOW_SOURCE_NAME,
 )
-from omegaconf import DictConfig, OmegaConf
+
+from rationai.mlkit.stream import StreamLogger
 
 
 MLFLOW_CHECKPOINT_PATH = "checkpoints"
@@ -30,7 +30,7 @@ MLFLOW_CONSOLE_LOG = "console.log"
 log = logging.getLogger(__name__)
 
 
-class MLFlowLogger(loggers.MLFlowLogger):
+class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def __init__(
         self,
         tags: dict[str, Any] | None = None,
@@ -58,30 +58,8 @@ class MLFlowLogger(loggers.MLFlowLogger):
 
         return super().experiment
 
-    @rank_zero_experiment
-    def get_stream_logger(self) -> Callable[[str], None]:
-        return (
-            lambda text: self.experiment.log_text(
-                self._run_id, text, MLFLOW_CONSOLE_LOG
-            )
-            if self._initialized
-            else None
-        )
-
-    def log_config(self, config: DictConfig) -> None:
-        """Logs the configuration to MLFlow."""
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp_dir_str:
-            tmp_dir = Path(tmp_dir_str)
-            with open(tmp_dir / "hydra.yaml", "w", encoding="utf-8") as file:
-                OmegaConf.save(HydraConfig.get(), file)
-
-            with open(tmp_dir / "config.yaml", "w", encoding="utf-8") as file:
-                OmegaConf.save(config, file)
-
-            with open(tmp_dir / "config-resolved.yaml", "w", encoding="utf-8") as file:
-                OmegaConf.save(config, file, resolve=True)
-
-            self.experiment.log_artifacts(self._run_id, tmp_dir, "configs")
+    def log_stream(self, text: str) -> None:
+        self.experiment.log_text(self.run_id, text, MLFLOW_CONSOLE_LOG)
 
     def _scan_checkpoints(self, checkpoint_callback: ModelCheckpoint) -> dict[str, str]:
         checkpoints: dict[str, str] = {}
@@ -112,21 +90,21 @@ class MLFlowLogger(loggers.MLFlowLogger):
         logged_checkpoints = {
             Path(x.path).stem: x.path
             for x in self.experiment.list_artifacts(
-                self._run_id, path=MLFLOW_CHECKPOINT_PATH
+                self.run_id, path=MLFLOW_CHECKPOINT_PATH
             )
         }
 
         # Delete old MLFlow checkpoints (those no logner kept by trainer)
         for key in set(logged_checkpoints).difference(checkpoints):
             self.experiment._tracking_client._get_artifact_repo(
-                self._run_id
+                self.run_id
             ).delete_artifacts(logged_checkpoints[key])
 
         # Log new checkpoints to MLFlow
         for key in set(checkpoints).difference(logged_checkpoints):
             # Log the checkpoint
             self.experiment.log_artifact(
-                self._run_id, checkpoints[key], f"{MLFLOW_CHECKPOINT_PATH}/{key}"
+                self.run_id, checkpoints[key], f"{MLFLOW_CHECKPOINT_PATH}/{key}"
             )
 
     def log_table(self, data: dict[str, Any], artifact_file: str) -> None:
@@ -134,20 +112,24 @@ class MLFlowLogger(loggers.MLFlowLogger):
 
         Individual logs are appended to the same file.
 
-        Example:
-        ```python
-        table = {
-            "slide_id": 1,
-            "acc": 0.5,
-        }
-        table2 = {
-            "slide_id": 2,
-            "acc": 0.8,
-        }
+        Args:
+            data: The data to log.
+            artifact_file: The name of the artifact file to log to.
 
-        self.log_table(data=table, artifact_file="results.json")
-        self.log_table(data=table2, artifact_file="results.json")
-        ```
+        Examples:
+            ```python
+            table = {
+                "slide_id": 1,
+                "acc": 0.5,
+            }
+            table2 = {
+                "slide_id": 2,
+                "acc": 0.8,
+            }
+
+            self.log_table(data=table, artifact_file="results.json")
+            self.log_table(data=table2, artifact_file="results.json")
+            ```
         """
         self.experiment.log_table(
             data=data, artifact_file=artifact_file, run_id=self.run_id
@@ -155,14 +137,35 @@ class MLFlowLogger(loggers.MLFlowLogger):
 
 
 def get_git_tags() -> dict[str, Any]:
-    repo = git.Repo(path=os.getenv("ORIG_WORKING_DIR", os.getcwd()))
-    if repo.head.is_detached:
+    try:
+        path = hydra.utils.get_original_cwd()
+    except ValueError:
+        path = os.getenv("ORIG_WORKING_DIR", os.getcwd())
+
+    try:
+        repo = git.Repo(path)
+    except (git.exc.InvalidGitRepositoryError, git.exc.NoSuchPathError):
+        log.warning("Cannot get git tags (not a git repository)")
+        return {}
+
+    tags = {
+        MLFLOW_GIT_COMMIT: repo.head.commit.hexsha,
+    }
+
+    if repo.remotes:
+        try:
+            remote_url = repo.remotes.origin.url
+        except AttributeError:
+            remote_url = repo.remotes[0].url
+        tags[MLFLOW_GIT_REPO_URL] = remote_url  # not in the UI
+        tags["git.repo_url"] = remote_url
+    else:
+        log.warning("Cannot get git remote url")
+
+    if not repo.head.is_detached:
+        tags[MLFLOW_GIT_BRANCH] = repo.active_branch.name  # not in the UI
+        tags["git.branch"] = repo.active_branch.name
+    else:
         log.warning("Cannot get git branch ('detached HEAD' state)")
 
-    return {
-        MLFLOW_GIT_COMMIT: repo.head.commit.hexsha,
-        MLFLOW_GIT_REPO_URL: repo.remotes.origin.url,  # not in the UI
-        "git.repo_url": repo.remotes.origin.url,
-        MLFLOW_GIT_BRANCH: repo.active_branch.name,  # not in the UI
-        "git.branch": repo.active_branch.name,
-    }
+    return tags

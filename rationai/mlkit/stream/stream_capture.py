@@ -1,16 +1,17 @@
 import io
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from types import TracebackType
 from typing import Self, TextIO
 
-from rationai.mlkit.stream_capture.stream_modifier import StreamModifier
+from rationai.mlkit.stream.stream_logger import StreamLogger
+from rationai.mlkit.stream.stream_modifier import StreamModifier
 
 
 class StreamCapture:
     def __init__(
         self,
-        logger: Callable[[str], None] | None = None,
+        logger: StreamLogger,
         streams: tuple[TextIO, ...] = (sys.stdout, sys.stderr),
     ) -> None:
         self.logger = logger
@@ -37,8 +38,7 @@ class StreamCapture:
         exctb: TracebackType | None,
     ) -> None:
         # Synchronize the logger with the last output
-        if self.logger:
-            self.logger(self.writer.getvalue())
+        self.logger.log_stream(self.writer.getvalue())
 
         for stream in self.streams_wrapped:
             stream.teardown()
@@ -72,8 +72,7 @@ class StreamCapture:
         self.writer.writelines(lines)
 
     def flush(self) -> None:
-        if self.logger:
-            self.logger(self.writer.getvalue())
+        self.logger.log_stream(self.writer.getvalue())
 
     def _get_lines(self) -> list[str]:
         return self.writer.getvalue().split("\n") or [""]
