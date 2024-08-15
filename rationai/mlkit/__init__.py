@@ -1,5 +1,5 @@
+from rationai.mlkit.autolog import autolog
 from rationai.mlkit.lightning import Trainer
-from rationai.mlkit.loget import loget
 
 
-__all__ = ["Trainer", "loget"]
+__all__ = ["autolog", "Trainer"]
