@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 WrapperT = Callable[[DictConfig], None]
-FunctionT = Callable[[DictConfig, Logger], None]
+FunctionT = Callable[[DictConfig, Logger | None], None]
 
 
 @overload
@@ -67,7 +67,7 @@ def autolog(
     return wrapper
 
 
-def _log_config(config: DictConfig, logger: Logger) -> None:
+def _log_config(config: DictConfig, logger: Logger | None) -> None:
     """Logs the hydra config."""
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
@@ -89,7 +89,7 @@ def _log_config(config: DictConfig, logger: Logger) -> None:
             )
 
 
-def _log_stream(logger: Logger, func: Callable[[], None]) -> None:
+def _log_stream(logger: Logger | StreamLogger | None, func: Callable[[], None]) -> None:
     """Logs the std streams using the logger."""
     if isinstance(logger, StreamLogger):
         with StreamCapture(logger):
