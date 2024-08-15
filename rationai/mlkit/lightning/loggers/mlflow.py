@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import git
+import git.exc
+import hydra
 import mlflow
 from lightning.fabric.loggers.logger import rank_zero_experiment
 from lightning.pytorch import loggers
@@ -135,14 +137,35 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
 
 
 def get_git_tags() -> dict[str, Any]:
-    repo = git.Repo(path=os.getenv("ORIG_WORKING_DIR", os.getcwd()))
-    if repo.head.is_detached:
+    try:
+        path = hydra.utils.get_original_cwd()
+    except ValueError:
+        path = os.getenv("ORIG_WORKING_DIR", os.getcwd())
+
+    try:
+        repo = git.Repo(path)
+    except (git.exc.InvalidGitRepositoryError, git.exc.NoSuchPathError):
+        log.warning("Cannot get git tags (not a git repository)")
+        return {}
+
+    tags = {
+        MLFLOW_GIT_COMMIT: repo.head.commit.hexsha,
+    }
+
+    if repo.remotes:
+        try:
+            remote_url = repo.remotes.origin.url
+        except AttributeError:
+            remote_url = repo.remotes[0].url
+        tags[MLFLOW_GIT_REPO_URL] = remote_url  # not in the UI
+        tags["git.repo_url"] = remote_url
+    else:
+        log.warning("Cannot get git remote url")
+
+    if not repo.head.is_detached:
+        tags[MLFLOW_GIT_BRANCH] = repo.active_branch.name  # not in the UI
+        tags["git.branch"] = repo.active_branch.name
+    else:
         log.warning("Cannot get git branch ('detached HEAD' state)")
 
-    return {
-        MLFLOW_GIT_COMMIT: repo.head.commit.hexsha,
-        MLFLOW_GIT_REPO_URL: repo.remotes.origin.url,  # not in the UI
-        "git.repo_url": repo.remotes.origin.url,
-        MLFLOW_GIT_BRANCH: repo.active_branch.name,  # not in the UI
-        "git.branch": repo.active_branch.name,
-    }
+    return tags
