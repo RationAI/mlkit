@@ -35,7 +35,7 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
         self,
         tags: dict[str, Any] | None = None,
         log_model: Literal[True, False, "all"] = "all",
-        log_system_metrics: bool = True,
+        log_system_metrics: bool = False,
         **kwargs: Any,
     ) -> None:
         tags = dict(tags or {})  # required because of omegaconf
@@ -94,18 +94,18 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
             )
         }
 
-        # Delete old MLFlow checkpoints (those no logner kept by trainer)
-        for key in set(logged_checkpoints).difference(checkpoints):
-            self.experiment._tracking_client._get_artifact_repo(
-                self.run_id
-            ).delete_artifacts(logged_checkpoints[key])
-
         # Log new checkpoints to MLFlow
         for key in set(checkpoints).difference(logged_checkpoints):
             # Log the checkpoint
             self.experiment.log_artifact(
                 self.run_id, checkpoints[key], f"{MLFLOW_CHECKPOINT_PATH}/{key}"
             )
+
+        # Delete old MLFlow checkpoints (those no logner kept by trainer)
+        for key in set(logged_checkpoints).difference(checkpoints):
+            self.experiment._tracking_client._get_artifact_repo(
+                self.run_id
+            ).delete_artifacts(logged_checkpoints[key])
 
     def log_table(self, data: dict[str, Any], artifact_file: str) -> None:
         """Logs a json table to mlflow as an artifact that can be viewed in the mlflow evaluation.
