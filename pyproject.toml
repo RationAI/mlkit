@@ -3,7 +3,7 @@ name = "rationai-mlkit"
 version = "0.1.15"
 description = ""
 authors = [
-    { name = "Matěj Pekár", email = "525077@mail.muni.cz" },
+    { name = "Matěj Pekár", email = "matejpekar@mail.muni.cz" },
     { name = "Jakub Pekár", email = "jakubpekar@mail.muni.cz" },
 ]
 requires-python = ">=3.11"
