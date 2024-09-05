@@ -78,7 +78,7 @@ class StratifiedBatchSampler(BatchSampler):
         return np.array([len(x) for x in indices])
 
     @staticmethod
-    def _compute_ratios(indices: list[list[int]]) -> NDArray[np.float_]:
+    def _compute_ratios(indices: list[list[int]]) -> NDArray[np.float64]:
         sizes = StratifiedBatchSampler._indices_size(indices)
         return sizes.astype(float) / sizes.sum()
 
