@@ -1,5 +1,6 @@
 import random
 from collections.abc import Iterator
+from copy import deepcopy
 from typing import Any
 
 import numpy as np
@@ -40,7 +41,7 @@ class StratifiedBatchSampler(BatchSampler):
         Yields:
             A list of sample indices for each batch.
         """
-        indices = self.data_indices
+        indices = deepcopy(self.data_indices)
 
         # Shuffle indices
         for group in indices:

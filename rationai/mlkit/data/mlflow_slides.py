@@ -21,12 +21,18 @@ class MLFlowSlides(ConcatDataset):
 
     def generate_datasets(self) -> Iterable[Dataset]:
         return (
-            SlideTiles(slide, self.filter_tiles_by_slide(slide.path))
+            SlideTiles(
+                slide_path=slide.path,
+                level=slide.level,
+                tile_width=slide.tile_width,
+                tile_height=slide.tile_height,
+                tiles=self.filter_tiles_by_slide(slide.path),
+            )
             for slide in self.slides.itertuples()
         )
 
-    def filter_tiles_by_slide(self, slide: str) -> pd.DataFrame:
-        return self.tiles[self.tiles["slide"] == slide]
+    def filter_tiles_by_slide(self, slide_path: str) -> pd.DataFrame:
+        return self.tiles[self.tiles["slide_path"] == slide_path]
 
     @staticmethod
     def load_slides_and_tiles(uris: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
