@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+import tempfile
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Literal
@@ -8,10 +10,14 @@ import git
 import git.exc
 import hydra
 import mlflow
+import torch
 from lightning.fabric.loggers.logger import rank_zero_experiment
 from lightning.pytorch import loggers
 from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
 from mlflow import MlflowClient
+from mlflow.models.model import MLMODEL_FILE_NAME
+from mlflow.pytorch import FLAVOR_NAME
+from mlflow.utils.file_utils import get_total_file_size
 from mlflow.utils.mlflow_tags import (
     MLFLOW_GIT_BRANCH,
     MLFLOW_GIT_COMMIT,
@@ -25,6 +31,7 @@ from rationai.mlkit.stream import StreamLogger
 
 MLFLOW_CHECKPOINT_PATH = "checkpoints"
 MLFLOW_CONSOLE_LOG = "console.log"
+MLFLOW_CHECKPOINT_FILE_NAME = "checkpoint.ckpt"
 
 
 log = logging.getLogger(__name__)
@@ -61,52 +68,6 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def log_stream(self, text: str) -> None:
         self.experiment.log_text(self.run_id, text, MLFLOW_CONSOLE_LOG)
 
-    def _scan_checkpoints(self, checkpoint_callback: ModelCheckpoint) -> dict[str, str]:
-        checkpoints: dict[str, str] = {}
-        if checkpoint_callback.last_model_path:
-            checkpoints[Path(checkpoint_callback.last_model_path).stem] = (
-                checkpoint_callback.last_model_path
-            )
-
-        if checkpoint_callback.best_model_path:
-            checkpoints[Path(checkpoint_callback.best_model_path).stem] = (
-                checkpoint_callback.best_model_path
-            )
-
-        for path in checkpoint_callback.best_k_models:
-            checkpoints[Path(path).stem] = path
-
-        return checkpoints
-
-    # Ensures that MLFlow logged checkpoints are in sync with those saved by the trainer.
-    def _scan_and_log_checkpoints(self, checkpoint_callback: ModelCheckpoint) -> None:
-        """Scan checkpoints and log them to MLFlow if not already logged.
-
-        Unfortunately MLFlow supports only deletion of directories, not individual files,
-        thereofre the infdividual checkpoints are logged in separate directories.
-        """
-        checkpoints = self._scan_checkpoints(checkpoint_callback)
-
-        logged_checkpoints = {
-            Path(x.path).stem: x.path
-            for x in self.experiment.list_artifacts(
-                self.run_id, path=MLFLOW_CHECKPOINT_PATH
-            )
-        }
-
-        # Log new checkpoints to MLFlow
-        for key in set(checkpoints).difference(logged_checkpoints):
-            # Log the checkpoint
-            self.experiment.log_artifact(
-                self.run_id, checkpoints[key], f"{MLFLOW_CHECKPOINT_PATH}/{key}"
-            )
-
-        # Delete old MLFlow checkpoints (those no logner kept by trainer)
-        for key in set(logged_checkpoints).difference(checkpoints):
-            self.experiment._tracking_client._get_artifact_repo(
-                self.run_id
-            ).delete_artifacts(logged_checkpoints[key])
-
     def log_table(self, data: dict[str, Any], artifact_file: str) -> None:
         """Logs a json table to mlflow as an artifact that can be viewed in the mlflow evaluation.
 
@@ -134,6 +95,77 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
         self.experiment.log_table(
             data=data, artifact_file=artifact_file, run_id=self.run_id
         )
+
+    def _scan_checkpoints(self, checkpoint_callback: ModelCheckpoint) -> dict[str, str]:
+        checkpoints: dict[str, str] = {}
+        if checkpoint_callback.last_model_path:
+            checkpoints[Path(checkpoint_callback.last_model_path).stem] = (
+                checkpoint_callback.last_model_path
+            )
+
+        if checkpoint_callback.best_model_path:
+            checkpoints[Path(checkpoint_callback.best_model_path).stem] = (
+                checkpoint_callback.best_model_path
+            )
+
+        for path in checkpoint_callback.best_k_models:
+            checkpoints[Path(path).stem] = path
+
+        return checkpoints
+
+    def _log_checkpoint(self, key: str, path: str) -> None:
+        """Log a lightning checkpoint to MLFlow and register it as a model.
+
+        Args:
+            key: The key to identify the checkpoint in MLFlow.
+            path: The path to the local checkpoint file.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir_str:
+            tmpdir = Path(tmpdir_str)
+
+            # Copy the checkpoint to a temporary directory so we can change its name
+            shutil.copy(path, tmpdir / MLFLOW_CHECKPOINT_FILE_NAME)
+
+            # Add model manifest for MLFlow to recognize the checkpoint
+            mlflow_model = mlflow.models.Model(
+                f"{MLFLOW_CHECKPOINT_PATH}/{key}",
+                self.run_id,
+                flavors={
+                    FLAVOR_NAME: {
+                        "model_data": MLFLOW_CHECKPOINT_FILE_NAME,
+                        "pytorch_version": str(torch.__version__),
+                    }
+                },
+                model_size_bytes=get_total_file_size(path),
+            )
+            mlflow_model.save(tmpdir / MLMODEL_FILE_NAME)
+
+            # Log the checkpoint to MLFlow
+            self.experiment.log_artifacts(
+                self.run_id, tmpdir, f"{MLFLOW_CHECKPOINT_PATH}/{key}"
+            )
+
+    # Ensures that MLFlow logged checkpoints are in sync with those saved by the trainer.
+    def _scan_and_log_checkpoints(self, checkpoint_callback: ModelCheckpoint) -> None:
+        """Scan checkpoints and log them to MLFlow if not already logged."""
+        checkpoints = self._scan_checkpoints(checkpoint_callback)
+
+        logged_checkpoints = {
+            Path(x.path).stem: x.path
+            for x in self.experiment.list_artifacts(
+                self.run_id, path=MLFLOW_CHECKPOINT_PATH
+            )
+        }
+
+        # Log new checkpoints to MLFlow
+        for key in set(checkpoints).difference(logged_checkpoints):
+            self._log_checkpoint(key, checkpoints[key])
+
+        # Delete old MLFlow checkpoints (those no logger kept by trainer)
+        for key in set(logged_checkpoints).difference(checkpoints):
+            self.experiment._tracking_client._get_artifact_repo(
+                self.run_id
+            ).delete_artifacts(logged_checkpoints[key])
 
 
 def get_git_tags() -> dict[str, Any]:
