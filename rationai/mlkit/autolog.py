@@ -27,12 +27,17 @@ def autolog(
     *,
     log_config: bool = True,
     log_stream: bool = True,
+    log_hyperparams: bool = True,
 ) -> WrapperT: ...
 
 
 @overload
 def autolog(
-    func: None = None, *, log_config: bool = True, log_stream: bool = True
+    func: None = None,
+    *,
+    log_config: bool = True,
+    log_stream: bool = True,
+    log_hyperparams: bool = True,
 ) -> Callable[[FunctionT], WrapperT]: ...
 
 
@@ -41,6 +46,7 @@ def autolog(
     *,
     log_config: bool = True,
     log_stream: bool = True,
+    log_hyperparams: bool = True,
 ) -> WrapperT | Callable[[FunctionT], WrapperT]:
     """Decorator for automatic logging.
 
@@ -48,16 +54,24 @@ def autolog(
         func: The function to decorate
         log_config: Whether to log the hydra configuration files
         log_stream: Whether to log the std streams
+        log_hyperparams: Whether to log the hyperparameters defined in the
+            config.metadata.hyperparams.
     """
     if func is None:
         return partial(autolog, log_config=log_config, log_stream=log_stream)
 
     @wraps(func)
     def wrapper(config: DictConfig) -> None:
-        logger = hydra.utils.instantiate(config.logger)
+        if hasattr(config, "logger"):
+            logger = hydra.utils.instantiate(config.logger)
+        else:
+            return func(config, None)
 
         if log_config:
             _log_config(config, logger)
+
+        if log_hyperparams:
+            _log_hyperparams(config, logger)
 
         if log_stream:
             return _log_stream(logger, partial(func, config, logger))
@@ -67,7 +81,7 @@ def autolog(
     return wrapper
 
 
-def _log_config(config: DictConfig, logger: Logger | None) -> None:
+def _log_config(config: DictConfig, logger: Logger) -> None:
     """Logs the hydra config."""
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
@@ -89,7 +103,7 @@ def _log_config(config: DictConfig, logger: Logger | None) -> None:
             )
 
 
-def _log_stream(logger: Logger | StreamLogger | None, func: Callable[[], None]) -> None:
+def _log_stream(logger: Logger | StreamLogger, func: Callable[[], None]) -> None:
     """Logs the std streams using the logger."""
     if isinstance(logger, StreamLogger):
         with StreamCapture(logger):
@@ -97,3 +111,12 @@ def _log_stream(logger: Logger | StreamLogger | None, func: Callable[[], None]) 
 
     log.warning("The %s logger is not supported for logging the std streams", logger)
     return func()
+
+
+def _log_hyperparams(config: DictConfig, logger: Logger) -> None:
+    if (
+        isinstance(logger, MLFlowLogger)
+        and hasattr(config, "metadata")
+        and hasattr(config.metadata, "hyperparams")
+    ):
+        logger.log_hyperparams(config.metadata.hyperparams)

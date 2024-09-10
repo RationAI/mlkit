@@ -1,4 +1,8 @@
+from collections.abc import Callable
+from typing import Any, ParamSpec, cast
+
 import lightning as pl
+from lightning import Callback
 from lightning.fabric.utilities.types import _PATH
 from lightning.pytorch.loggers.mlflow import MLFlowLogger
 from lightning.pytorch.utilities.types import _EVALUATE_OUTPUT, _PREDICT_OUTPUT
@@ -9,15 +13,29 @@ ARTIFACTS_PREFIX = "mlflow-artifacts:/"
 ARTIFACTS_DOWNLOAD_PATH = "mlflow_artifacts/checkpoints"
 
 
-class Trainer(pl.Trainer):
-    def __init__(self, *args, **kwargs):
-        """A wrapper around the lightning.Trainer class that allows for callbacks to be passed as a dict.
+P = ParamSpec("P")
 
-        This allows simpler callbacks configuration using Hydra
-        """
-        if "callbacks" in kwargs and isinstance(kwargs["callbacks"], dict):
-            kwargs["callbacks"] = list(kwargs["callbacks"].values())
-        super().__init__(*args, **kwargs)
+
+def _copy_kwargs(
+    _: Callable[P, None],
+) -> Callable[[Callable[..., None]], Callable[P, None]]:
+    def return_func(func: Callable[..., None]) -> Callable[P, None]:
+        return cast(Callable[P, None], func)
+
+    return return_func
+
+
+class Trainer(pl.Trainer):
+    @_copy_kwargs(pl.Trainer.__init__)
+    def __init__(
+        self,
+        *,
+        callbacks: dict[str, Callback] | list[Callback] | Callback | None = None,
+        **kwargs: Any,
+    ) -> None:
+        if isinstance(callbacks, dict):
+            callbacks = list(callbacks.values())
+        super().__init__(callbacks=callbacks, **kwargs)
 
     def _run(
         self, model: pl.LightningModule, ckpt_path: _PATH | None = None
