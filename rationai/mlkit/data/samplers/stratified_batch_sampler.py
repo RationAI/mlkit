@@ -84,7 +84,7 @@ class StratifiedBatchSampler(BatchSampler):
         return sizes.astype(float) / sizes.sum()
 
 
-class PDMStartifiedBatchSampler(StratifiedBatchSampler):
+class PDMStratifiedBatchSampler(StratifiedBatchSampler):
     """A subclass of MulticlassBatchSampler that handles Pandas DataFrames.
 
     This sampler is designed to create balanced batches from a DataFrame by
@@ -100,7 +100,7 @@ class PDMStartifiedBatchSampler(StratifiedBatchSampler):
         batch_size: int,
         **kwargs: dict[str, Any],
     ) -> None:
-        """Initializes the PDMStartifiedBatchSampler with DataFrame and batch size.
+        """Initializes the PDMStratifiedBatchSampler with DataFrame and batch size.
 
         Groups the DataFrame based on the stratification column and generates
         batches by sampling from these groups.
