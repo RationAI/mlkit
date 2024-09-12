@@ -7,19 +7,17 @@ repos:
       - id: check-yaml
         args: [--unsafe]
 
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v3.4.0
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.29.0
     hooks:
-      - id: conventional-pre-commit
-        stages: [commit-msg]
-        args: [] # optional: list of Conventional Commits types to allow e.g. [feat, fix, ci, chore, test]
+      - id: commitizen
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.3
+    rev: v0.6.4
     hooks:
       # Run the linter.
       - id: ruff
         entry: pdm lint --force-exclude
-      #   Run the formatter.
+      # Run the formatter.
       - id: ruff-format
         entry: pdm format --force-exclude
