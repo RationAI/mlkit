@@ -16,7 +16,7 @@ class OpenSlideTilesDataset(Dataset[NDArray[np.uint8]]):
     being returned.
 
     Attributes:
-        slide (str | Path): Path to the slide image.
+        slide (Path): Path to the slide image.
         level (int | str): Level of the slide to read. If int, it is used as the level.
             If str, it is used as the column name in the tiles DataFrame.
         tile_extent_x (int | str): Width of the tile. If int, it is used as the width.
@@ -48,7 +48,7 @@ class OpenSlideTilesDataset(Dataset[NDArray[np.uint8]]):
             tiles: DataFrame with columns ["x", "y"].
         """
         super().__init__()
-        self.slide_path = slide_path
+        self.slide_path = Path(slide_path)
         self.level = level
         self.tile_extent_x = tile_extent_x
         self.tile_extent_y = tile_extent_y
