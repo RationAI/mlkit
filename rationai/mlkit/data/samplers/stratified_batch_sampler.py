@@ -48,26 +48,28 @@ class StratifiedBatchSampler(BatchSampler):
             random.shuffle(group)
 
         while self._indices_size(indices).sum() >= self.batch_size:
-            counts = np.floor(self._compute_ratios(indices) * self.batch_size).astype(
-                int
-            )
+            real_counts = self._compute_ratios(indices) * self.batch_size
+            counts = np.floor(real_counts).astype(int)
+            missing_counts = real_counts - counts
 
-            batch_indices = np.concatenate(
-                [[indices[i].pop() for _ in range(c)] for i, c in enumerate(counts)]
+            # If there are missing samples, add randomly weighted samples
+            if missing_counts.sum():
+                indices_to_add = (
+                    np.random.rand(len(indices))
+                    * missing_counts
+                    / np.sum(missing_counts)
+                    # numpy's argsort sorts in ascending order so we need to reverse it
+                ).argsort()[-(self.batch_size - np.sum(counts)) :]
+                counts += np.isin(np.arange(len(indices)), indices_to_add)
+
+            batch_indices = list(
+                np.concatenate(
+                    [[indices[i].pop() for _ in range(c)] for i, c in enumerate(counts)]
+                )
             )
 
             # Filter out empty groups efficiently
             indices = [group for group in indices if group]
-
-            while batch_indices.size < self.batch_size and indices:
-                group_idx = random.randint(0, len(indices) - 1)
-                batch_indices = np.append(batch_indices, indices[group_idx].pop())
-
-                # Remove empty groups after popping
-                if not len(indices[group_idx]):
-                    indices.pop(group_idx)
-
-            batch_indices = list(batch_indices)
             random.shuffle(batch_indices)
             yield batch_indices
 
