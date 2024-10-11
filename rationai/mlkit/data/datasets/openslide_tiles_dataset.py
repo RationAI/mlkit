@@ -54,37 +54,25 @@ class OpenSlideTilesDataset(Dataset[NDArray[np.uint8]]):
         self.tile_extent_y = tile_extent_y
         self.tiles = tiles
 
-        self._slide: OpenSlide | None = None
-
     def __len__(self) -> int:
         return len(self.tiles)
 
     def __getitem__(self, idx: int) -> NDArray[np.uint8]:
         """Returns tile from the slide image at the specified index in RGB format."""
-        if self._slide is None:
-            self._slide = OpenSlide(self.slide_path)
+        with OpenSlide(self.slide_path) as slide:
+            tile = self.tiles.iloc[idx]
 
-        tile = self.tiles.iloc[idx]
+            level = self._get_from_tile(tile, self.level)
+            extent_x = self._get_from_tile(tile, self.tile_extent_x)
+            extent_y = self._get_from_tile(tile, self.tile_extent_y)
+            x = int(tile["x"] * slide.level_downsamples[level])
+            y = int(tile["y"] * slide.level_downsamples[level])
 
-        level = self._get_from_tile(tile, self.level)
-        extent_x = self._get_from_tile(tile, self.tile_extent_x)
-        extent_y = self._get_from_tile(tile, self.tile_extent_y)
-        x = int(tile["x"] * self._slide.level_downsamples[level])
-        y = int(tile["y"] * self._slide.level_downsamples[level])
-
-        rgba_region = self._slide.read_region((x, y), level, (extent_x, extent_y))
-        rgb_region = Image.alpha_composite(
-            Image.new("RGBA", rgba_region.size, (255, 255, 255)), rgba_region
-        ).convert("RGB")
-        return np.array(rgb_region)
-
-    def __del__(self) -> None:
-        self.close()
-
-    def close(self) -> None:
-        """Close the OpenSlide file handle."""
-        if self._slide is not None:
-            self._slide.close()
+            rgba_region = slide.read_region((x, y), level, (extent_x, extent_y))
+            rgb_region = Image.alpha_composite(
+                Image.new("RGBA", rgba_region.size, (255, 255, 255)), rgba_region
+            ).convert("RGB")
+            return np.array(rgb_region)
 
     def _get_from_tile(self, tile: pd.Series, key: int | str) -> int:
         return tile[key] if isinstance(key, str) else key
