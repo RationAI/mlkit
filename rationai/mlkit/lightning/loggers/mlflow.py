@@ -20,7 +20,6 @@ from mlflow.pytorch import FLAVOR_NAME
 from mlflow.utils.file_utils import get_total_file_size
 from mlflow.utils.mlflow_tags import (
     MLFLOW_GIT_BRANCH,
-    MLFLOW_GIT_COMMIT,
     MLFLOW_GIT_REPO_URL,
     MLFLOW_PARENT_RUN_ID,
     MLFLOW_SOURCE_NAME,
@@ -180,9 +179,7 @@ def get_git_tags() -> dict[str, Any]:
         log.warning("Cannot get git tags (not a git repository)")
         return {}
 
-    tags = {
-        MLFLOW_GIT_COMMIT: repo.head.commit.hexsha,
-    }
+    tags: dict[str, Any] = {}
 
     if repo.remotes:
         try:
@@ -195,8 +192,7 @@ def get_git_tags() -> dict[str, Any]:
         log.warning("Cannot get git remote url")
 
     if not repo.head.is_detached:
-        tags[MLFLOW_GIT_BRANCH] = repo.active_branch.name  # not in the UI
-        tags["git.branch"] = repo.active_branch.name
+        tags[MLFLOW_GIT_BRANCH] = repo.active_branch.name
     else:
         log.warning("Cannot get git branch ('detached HEAD' state)")
 
