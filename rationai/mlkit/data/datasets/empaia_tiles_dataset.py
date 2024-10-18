@@ -1,12 +1,17 @@
 import io
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import PIL
-from empaia_client import EmpaiaSlide
-from empaia_client.clients.synchronous import BaseEmpaiaClient
 from numpy.typing import NDArray
 from torch.utils.data import Dataset
+
+from rationai.empaia.workbench_api.clients.synchronous import BaseEmpaiaClient
+
+
+if TYPE_CHECKING:
+    from rationai.empaia.workbench_api.empaia_slide import EmpaiaSlide
 
 
 class EmpaiaTilesDataset(Dataset[NDArray[np.uint8]]):
