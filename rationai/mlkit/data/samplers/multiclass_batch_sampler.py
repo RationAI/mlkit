@@ -67,7 +67,7 @@ class PDMulticlassBatchSampler(MulticlassBatchSampler):
         **kwargs: dict[str, Any],
     ):
         samplers: list[Sampler[int]] = [
-            RandomSampler(list(x.index))
+            RandomSampler(list(x.index), replacement=True)
             for _, x in data.groupby(by=stratify_by, **kwargs)
         ]
         super().__init__(samplers, distribution, batch_size, iterations_per_epoch)
