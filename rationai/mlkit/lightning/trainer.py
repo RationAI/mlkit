@@ -7,6 +7,7 @@ from lightning.fabric.utilities.types import _PATH
 from lightning.pytorch.loggers.mlflow import MLFlowLogger
 from lightning.pytorch.utilities.types import _EVALUATE_OUTPUT, _PREDICT_OUTPUT
 from mlflow.artifacts import download_artifacts
+from omegaconf import DictConfig
 
 
 ARTIFACTS_PREFIX = "mlflow-artifacts:/"
@@ -30,10 +31,14 @@ class Trainer(pl.Trainer):
     def __init__(
         self,
         *,
-        callbacks: dict[str, Callback] | list[Callback] | Callback | None = None,
+        callbacks: dict[str, Callback]
+        | DictConfig
+        | list[Callback]
+        | Callback
+        | None = None,
         **kwargs: Any,
     ) -> None:
-        if isinstance(callbacks, dict):
+        if isinstance(callbacks, dict | DictConfig):
             callbacks = list(callbacks.values())
         super().__init__(callbacks=callbacks, **kwargs)
 
