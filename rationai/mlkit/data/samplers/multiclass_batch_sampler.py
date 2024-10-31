@@ -12,18 +12,18 @@ class MulticlassBatchSampler(BatchSampler):
         self,
         samplers: list[Sampler[int] | Iterable[int]],
         distribution: list[float],
-        iterations_per_epoch: int,
+        epoch_size: int,
         batch_size: int,
     ) -> None:
         self.samplers = samplers
         self.distribution = distribution
-        self.iterations_per_epoch = iterations_per_epoch
+        self.epoch_size = epoch_size
         self.batch_size = batch_size
 
     def __iter__(self) -> Iterator[list[int]]:
         samplers_iters = [iter(sampler) for sampler in self.samplers]
 
-        for _ in range(self.iterations_per_epoch):
+        for _ in range(self.epoch_size):
             batch = []
             for sampler, count in zip(
                 samplers_iters,
@@ -34,7 +34,7 @@ class MulticlassBatchSampler(BatchSampler):
             yield batch
 
     def __len__(self) -> int:
-        return self.iterations_per_epoch
+        return self.epoch_size
 
     @staticmethod
     def _random_sample_counts(
@@ -62,7 +62,7 @@ class PDMulticlassBatchSampler(MulticlassBatchSampler):
         data: pd.DataFrame,
         stratify_by: None,
         distribution: list[float],
-        iterations_per_epoch: int,
+        epoch_size: int,
         batch_size: int,
         **kwargs: dict[str, Any],
     ):
@@ -70,4 +70,9 @@ class PDMulticlassBatchSampler(MulticlassBatchSampler):
             RandomSampler(list(x.index), replacement=True)
             for _, x in data.groupby(by=stratify_by, **kwargs)
         ]
-        super().__init__(samplers, distribution, batch_size, iterations_per_epoch)
+        super().__init__(
+            samplers=samplers,
+            distribution=distribution,
+            epoch_size=epoch_size,
+            batch_size=batch_size,
+        )
