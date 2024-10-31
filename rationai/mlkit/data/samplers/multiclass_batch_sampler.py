@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
-from torch.utils.data import BatchSampler, RandomSampler, Sampler
+from torch.utils.data import BatchSampler, Sampler
 
 
 class MulticlassBatchSampler(BatchSampler):
@@ -56,16 +56,20 @@ class MulticlassBatchSampler(BatchSampler):
         return list(counts)
 
 
-class SubsetRandomSampler(RandomSampler):
-    def __init__(self, data):
-        self.data = data
-        super().__init__(data, replacement=True)
+class SubsetRandomInftySampler(Sampler[int]):
+    def __init__(self, indices: list[int]) -> None:
+        self.indices = indices
 
-    def __iter__(self):
-        it = super().__iter__()
+    def __iter__(self) -> Iterator[int]:
+        while True:
+            for i in self.__single_iteration__():
+                yield self.indices[i]
 
-        for idx in it:
-            yield self.data[idx]
+    def __single_iteration__(self) -> Iterator[int]:
+        return iter(np.random.permutation(len(self.indices)))
+
+    def __len__(self) -> None:
+        return None
 
 
 class PDMulticlassBatchSampler(MulticlassBatchSampler):
@@ -79,7 +83,7 @@ class PDMulticlassBatchSampler(MulticlassBatchSampler):
         **kwargs: dict[str, Any],
     ):
         samplers: list[Sampler[int]] = [
-            SubsetRandomSampler(list(x.index))
+            SubsetRandomInftySampler(list(x.index))
             for _, x in data.groupby(by=stratify_by, **kwargs)
         ]
         super().__init__(
