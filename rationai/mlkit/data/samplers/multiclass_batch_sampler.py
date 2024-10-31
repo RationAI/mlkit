@@ -56,6 +56,18 @@ class MulticlassBatchSampler(BatchSampler):
         return list(counts)
 
 
+class SubsetRandomSampler(RandomSampler):
+    def __init__(self, data):
+        self.data = data
+        super().__init__(data, replacement=True)
+
+    def __iter__(self):
+        it = super().__iter__()
+
+        for idx in it:
+            yield self.data[idx]
+
+
 class PDMulticlassBatchSampler(MulticlassBatchSampler):
     def __init__(
         self,
@@ -67,7 +79,7 @@ class PDMulticlassBatchSampler(MulticlassBatchSampler):
         **kwargs: dict[str, Any],
     ):
         samplers: list[Sampler[int]] = [
-            RandomSampler(list(x.index), replacement=True)
+            SubsetRandomSampler(list(x.index))
             for _, x in data.groupby(by=stratify_by, **kwargs)
         ]
         super().__init__(
