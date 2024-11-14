@@ -51,13 +51,13 @@ class FixedBatchSampler(BatchSampler):
             yield batch_indices
 
     def __len__(self) -> int:
-        num_batches_per_class = [
-            len(sublist) // num_samples
-            for sublist, num_samples in zip(
-                self.data_indices, self.batch_distribution, strict=False
-            )
-        ]
-        return min(num_batches_per_class)
+        # num_batches_per_class = [
+        #    len(sublist) // num_samples
+        #    for sublist, num_samples in zip(
+        #        self.data_indices, self.batch_distribution, strict=False
+        #    )
+        # ] # TODO: Caused problems with validation epoch start, consider reworking
+        return float("inf")
 
 
 class ResampleBatchSampler(FixedBatchSampler):
