@@ -30,9 +30,9 @@ class TargetBatchSampler(BatchSampler):
         """
         assert batch_size % 2 == 0, "Batch size must be even."
         assert len(data_indices) > 1, "At least two classes are required."
-        assert (
-            len(data_indices) < batch_size // 2
-        ), "Class samples has to have atleast one sample. Increase batch size."
+        # assert ( # TODO: How to handle this?
+        #    len(data_indices) < batch_size // 2
+        # ), "Class samples has to have atleast one sample. Increase batch size."
 
         self.epoch_size = epoch_size
         self.data_indices = data_indices
