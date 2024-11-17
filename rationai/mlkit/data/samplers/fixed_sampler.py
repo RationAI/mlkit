@@ -1,35 +1,39 @@
 import random
 from collections.abc import Iterator
-from copy import deepcopy
 
 import numpy as np
 from numpy.typing import NDArray
-from omegaconf import DictConfig
-from torch.utils.data import BatchSampler, Dataset, WeightedRandomSampler
+from torch.utils.data import BatchSampler, Dataset, Sampler, WeightedRandomSampler
 
 
-class FixedBatchSampler(BatchSampler):
+class TargetBatchSampler(BatchSampler):
     """A batch sampler that selects fixed size batches from multiple classes.
 
-    This sampler allows for creating batches with a fixed size by drawing
-    samples until minimum number of samples is reached for one of the classes.
+    The sampler selects a `batch_size // 2` of target class samples and distribute
+    rest of the non-target samples randomly to create balanced batches.
     """
 
     def __init__(
-        self, data_indices: list[list[int]], batch_distribution: NDArray
+        self,
+        data_indices: list[Sampler[int]],
+        target_label: int,
+        batch_size: int,
+        epoch_size: int,
     ) -> None:
-        """Initializes the Fixed sampler with data indices and batch size.
+        """Initializes the sampler.
 
         Args:
-            data_indices: A list of class-based sample indices.
-            batch_distribution: The distribution of samples to draw from each class.
+            data_indices (list[Sampler[int]]): A list of class-based sample indices.
+            target_label (int): The target label to draw samples from.
+            batch_size (int): The size of the batch.
+            epoch_size (int): The number of batches to yield.
         """
-        assert len(data_indices) == len(
-            batch_distribution
-        ), f"Number of classes must match with distribution : {batch_distribution}"
+        assert batch_size % 2 == 0, "Batch size must be even."
+
+        self.epoch_size = epoch_size
         self.data_indices = data_indices
-        self.batch_size = sum(batch_distribution)
-        self.batch_distribution = batch_distribution
+        self.batch_size = batch_size
+        self.target_label = target_label
 
     def __iter__(self) -> Iterator[list[int]]:
         """Yields balanced batches of samples from multiple classes based on the distribution.
@@ -37,81 +41,148 @@ class FixedBatchSampler(BatchSampler):
         Yields:
             A list of sample indices for each batch.
         """
-        indices = deepcopy(self.data_indices)
-        while all(len(sublist) // self.batch_size > 0 for sublist in indices):
-            batch_indices = list(
-                np.concatenate(
-                    [
-                        [indices[i].pop() for _ in range(c)]
-                        for i, c in enumerate(self.batch_distribution)
-                    ]
+        samplers_iters = [iter(sampler) for sampler in self.data_indices]
+
+        for _ in range(self.epoch_size):
+            batch = []
+            for _, (sampler, count) in enumerate(
+                zip(
+                    samplers_iters,
+                    self._compute_batch_distribution(self.target_label),
+                    strict=False,
                 )
-            )
-            random.shuffle(batch_indices)
-            yield batch_indices
+            ):
+                batch.extend(next(sampler) for _ in range(count))
+            random.shuffle(batch)
+            yield batch
 
     def __len__(self) -> int:
-        # num_batches_per_class = [
-        #    len(sublist) // num_samples
-        #    for sublist, num_samples in zip(
-        #        self.data_indices, self.batch_distribution, strict=False
-        #    )
-        # ] # TODO: Caused problems with validation epoch start, consider reworking
-        return float("inf")
+        """Returns the number of batches per epoch.
+
+        Returns:
+            The number of batches per epoch.
+        """
+        return self.epoch_size
+
+    def _compute_batch_distribution(self, target_label: int) -> NDArray:
+        """Computes the distribution of samples to draw from each class.
+
+        Target distribution will be sampled to have `self.batch_size // 2` samples in one batch.
+        The rest of the samples are distributed to match given batch size randomly.
+
+        Args:
+            target_label (int): The target label to draw samples from.
+
+        Returns:
+            NDArray: The distribution of samples to draw from each class.
+        """
+        num_classes = len(self.data_indices)
+        non_target_indices = [i for i in range(num_classes) if i != target_label - 1]
+
+        # Set the initial value for the target label
+        distribution = np.zeros(num_classes, dtype=int)
+        distribution[target_label - 1] = self.batch_size // 2
+
+        # Distribute the remaining samples evenly
+        remaining_samples = self.batch_size // 2
+        remaining_iteration = distribution[target_label - 1] // (num_classes - 1)
+        add = np.ones(num_classes, dtype=int) * remaining_iteration
+
+        # Null tge target label bin
+        add[target_label - 1] = 0
+
+        # Add samples to the distribution
+        distribution += add
+        remaining_samples -= sum(add)
+        # Fill the rest of the bins
+        if remaining_samples:
+            for _ in range(remaining_samples):
+                random_index = random.choice(non_target_indices)
+                distribution[random_index] += 1
+        assert (
+            sum(distribution) % self.batch_size == 0
+        ), "Functionality is corrupted. Report the issue"
+        return distribution
 
 
-class ResampleBatchSampler(FixedBatchSampler):
-    """This sampler is designed to create balanced batches from a Dataset by stratifying sampling.
+class RebalanceSampler(Sampler[int]):
+    """A sampler that rebalances the dataset using `torch.utilds.data.WeightedRandomSampler` with replacement."""
 
-    It leverages WeightedRandomSampler to upsample to given distribution. Then, stratified sampling is performed to create balanced batches.
-    Note that when specifying replacement=True, the number of samples must be greater than or equal to the number of classes. Also note that
-    the balance could be visible over multiple epochs, as the sampler work with weights and not counts, but its not.
-    """
+    def __init__(self, indices: list[int], num_samples: int) -> None:
+        """Initializes the sampler.
+
+        Args:
+            indices (list[int]): A list of sample indices.
+            num_samples (int): The number of samples to draw.
+        """
+        self.indices = indices
+        self.class_count = len(indices)
+        self.weights = [1 / num_samples for _ in indices]
+        self.num_samples = num_samples
+
+    def __iter__(self) -> Iterator[int]:
+        """Yields resampled data indices.
+
+        Yields:
+            Sample indices.
+        """
+        while True:
+            for i in self.__single_iteration__():
+                yield self.indices[i]
+
+    def __single_iteration__(self) -> Iterator[int]:
+        """Performs a single iteration of sampling.
+
+        Returns:
+            An iterator over sample indices.
+        """
+        return WeightedRandomSampler(
+            weights=self.weights,
+            num_samples=self.num_samples,
+            replacement=self.class_count < self.num_samples,
+        ).__iter__()
+
+    def __len__(self) -> None:
+        """Returns the length of the sampler.
+
+        Returns:
+            None
+        """
+        return None
+
+
+class DatasetMulticlassSampler(TargetBatchSampler):
+    """A sampler that creates balanced batches from a multiclass dataset."""
 
     def __init__(
         self,
         dataset: Dataset,
-        sampler_args: DictConfig,
+        epoch_samples: int,
+        stratify_by: str,
+        target_label: int,
         batch_size: int,
     ) -> None:
-        """Initializes the ResampleBatchSampler with dataset and batch distribution."""
-        label_counts = dataset.tiles[sampler_args.stratify_by].value_counts().to_dict()
+        """Initializes the sampler.
 
-        # Compute class weights to adjust the sampler
-        class_weights = {
-            label: sampler_args.sampler_distribution.get(label, 0) / count
-            for label, count in label_counts.items()
-        }
-
-        # Assign weights to each sample based on class weights
-        labels = dataset.tiles[sampler_args.stratify_by]
-        weights = labels.map(class_weights).values
-
-        replacement = any(
-            count < sampler_args.sampler_distribution.get(label, 0)
-            for label, count in label_counts.items()
-        )
-
-        total_samples = sum(sampler_args.sampler_distribution.values())
-        sampler = WeightedRandomSampler(
-            weights=weights, num_samples=total_samples, replacement=replacement
-        )
-        # Group sampled indices by class
-        sampled_indices = list(sampler)
-        data_indices = [
-            (label, list(group.index))
-            for label, group in dataset.tiles.iloc[sampled_indices].groupby(
-                sampler_args.stratify_by
+        Args:
+            dataset (Dataset): The dataset to sample from.
+            epoch_samples (int): The number of samples per epoch.
+            stratify_by (str): The attribute to stratify by.
+            target_label (int): Target label thah will be represented in the batch with half of the samples.
+            batch_size (int): The size of the batch.
+        """
+        data_indices: list[Sampler[int]] = [
+            RebalanceSampler(
+                indices=list(group.index),
+                num_samples=epoch_samples,
             )
+            for _, group in dataset.tiles.groupby(stratify_by)
         ]
 
-        batch_distribution = [
-            (np.array(sampler_args.batch_distribution[label]) * batch_size).astype(int)
-            for label, _ in data_indices
-        ]
-
-        assert (
-            sum(batch_distribution) == batch_size
-        ), f"Batch distribution must sum to batch size: {batch_distribution}"
-
-        super().__init__([x[1] for x in data_indices], batch_distribution)
+        epoch_size = epoch_samples // (batch_size // 2)
+        super().__init__(
+            data_indices=data_indices,
+            target_label=target_label,
+            batch_size=batch_size,
+            epoch_size=epoch_size,
+        )
