@@ -86,7 +86,7 @@ class TargetBatchSampler(BatchSampler):
         remaining_iteration = distribution[target_label - 1] // (num_classes - 1)
         add = np.ones(num_classes, dtype=np.int32) * remaining_iteration
 
-        # Null tge target label bin
+        # Null the target label bin
         add[target_label - 1] = 0
 
         # Add samples to the distribution
