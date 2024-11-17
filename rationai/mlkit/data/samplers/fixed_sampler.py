@@ -2,8 +2,9 @@ import random
 from collections.abc import Iterator
 
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
-from torch.utils.data import BatchSampler, Dataset, Sampler, WeightedRandomSampler
+from torch.utils.data import BatchSampler, Sampler, WeightedRandomSampler
 
 
 class TargetBatchSampler(BatchSampler):
@@ -154,7 +155,7 @@ class DatasetMulticlassSampler(TargetBatchSampler):
 
     def __init__(
         self,
-        dataset: Dataset,
+        tiles: pd.DataFrame,
         epoch_samples: int,
         stratify_by: str,
         target_label: int,
@@ -163,7 +164,7 @@ class DatasetMulticlassSampler(TargetBatchSampler):
         """Initializes the sampler.
 
         Args:
-            dataset (Dataset): The dataset to sample from.
+            tiles (pd.DataFrame): Tiles dataframe that will be stratified by `stratify_by` option.
             epoch_samples (int): The number of samples per epoch.
             stratify_by (str): The attribute to stratify by.
             target_label (int): Target label thah will be represented in the batch with half of the samples.
@@ -174,7 +175,7 @@ class DatasetMulticlassSampler(TargetBatchSampler):
                 indices=list(group.index),
                 num_samples=epoch_samples,
             )
-            for _, group in dataset.tiles.groupby(stratify_by)
+            for _, group in tiles.groupby(stratify_by)
         ]
 
         epoch_size = epoch_samples // (batch_size // 2)
