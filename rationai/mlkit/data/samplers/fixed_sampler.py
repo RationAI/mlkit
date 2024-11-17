@@ -29,6 +29,10 @@ class TargetBatchSampler(BatchSampler):
             epoch_size (int): The number of batches to yield.
         """
         assert batch_size % 2 == 0, "Batch size must be even."
+        assert len(data_indices) > 1, "At least two classes are required."
+        assert (
+            len(data_indices) < batch_size // 2
+        ), "Class samples has to have atleast one sample. Increase batch size."
 
         self.epoch_size = epoch_size
         self.data_indices = data_indices
@@ -45,12 +49,10 @@ class TargetBatchSampler(BatchSampler):
 
         for _ in range(self.epoch_size):
             batch = []
-            for _, (sampler, count) in enumerate(
-                zip(
-                    samplers_iters,
-                    self._compute_batch_distribution(self.target_label),
-                    strict=False,
-                )
+            for sampler, count in zip(
+                samplers_iters,
+                self._compute_batch_distribution(self.target_label),
+                strict=False,
             ):
                 batch.extend(next(sampler) for _ in range(count))
             random.shuffle(batch)
@@ -78,15 +80,11 @@ class TargetBatchSampler(BatchSampler):
         """
         num_classes = len(self.data_indices)
         non_target_indices = [i for i in range(num_classes) if i != target_label - 1]
-
-        # Set the initial value for the target label
         distribution = np.zeros(num_classes, dtype=int)
         distribution[target_label - 1] = self.batch_size // 2
-
-        # Distribute the remaining samples evenly
         remaining_samples = self.batch_size // 2
         remaining_iteration = distribution[target_label - 1] // (num_classes - 1)
-        add = np.ones(num_classes, dtype=int) * remaining_iteration
+        add = np.ones(num_classes, dtype=np.int32) * remaining_iteration
 
         # Null tge target label bin
         add[target_label - 1] = 0
