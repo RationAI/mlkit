@@ -1,6 +1,6 @@
 from rationai.mlkit.data.samplers.fixed_sampler import (
-    FixedBatchSampler,
-    ResampleBatchSampler,
+    DatasetMulticlassSampler,
+    TargetBatchSampler,
 )
 from rationai.mlkit.data.samplers.stratified_batch_sampler import (
     PDMStratifiedBatchSampler,
@@ -11,6 +11,6 @@ from rationai.mlkit.data.samplers.stratified_batch_sampler import (
 __all__ = [
     "PDMStratifiedBatchSampler",
     "StratifiedBatchSampler",
-    "FixedBatchSampler",
-    "ResampleBatchSampler",
+    "TargetBatchSampler",
+    "DatasetMulticlassSampler",
 ]
