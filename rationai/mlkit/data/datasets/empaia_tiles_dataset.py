@@ -36,7 +36,7 @@ class EmpaiaTilesDataset(Dataset[NDArray[np.uint8]]):
 
     def __init__(
         self,
-        case_id: str,  # FUT this can be removed once we do not use the scope api
+        case_id: str,
         slide_id: str,
         level: int | str,
         tile_extent_x: int | str,
