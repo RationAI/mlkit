@@ -157,8 +157,10 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
             )
         }
 
-        # Log new checkpoints to MLFlow
-        for key in set(checkpoints).difference(logged_checkpoints):
+        # Log new checkpoints to MLFlow but ignore the last checkpoint
+        for key in set(checkpoints).difference(
+            set(logged_checkpoints) - {ModelCheckpoint.CHECKPOINT_NAME_LAST}
+        ):
             self._log_checkpoint(key, checkpoints[key])
 
         # Delete old MLFlow checkpoints (those no logger kept by trainer)
