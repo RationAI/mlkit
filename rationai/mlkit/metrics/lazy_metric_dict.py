@@ -1,10 +1,15 @@
 from copy import deepcopy
 from typing import Any
 
+from deprecated import deprecated
 from torch.nn import ModuleDict
 from torchmetrics import Metric, MetricCollection
 
 
+@deprecated(
+    version="0.2.0",
+    reason="LazyMetricDict is deprecated. Use rationai.mlkit.metrics.NestedMetricCollection instead.",
+)
 class LazyMetricDict(ModuleDict):
     def __init__(self, metric: Metric | MetricCollection) -> None:
         super().__init__()
