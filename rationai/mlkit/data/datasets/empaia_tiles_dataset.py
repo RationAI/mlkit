@@ -68,8 +68,8 @@ class EmpaiaTilesDataset(Dataset[NDArray[np.uint8]]):
         level = self._get_from_tile(tile, self.level)
         extent_x = self._get_from_tile(tile, self.tile_extent_x)
         extent_y = self._get_from_tile(tile, self.tile_extent_y)
-        x = int(tile["x"] * self._slide.level_downsamples[level])
-        y = int(tile["y"] * self._slide.level_downsamples[level])
+        x = int(tile["x"])
+        y = int(tile["y"])
 
         tile_bytes = self._empaia_client.get_region(
             self.case_id, self.slide_id, level, x, y, extent_x, extent_y
