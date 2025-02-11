@@ -81,7 +81,8 @@ class AggregatedMetricCollection(MetricCollection):
     ) -> None:
         super().__init__(metrics, prefix=prefix)
 
-        self.aggregators: dict[str, Aggregator] = defaultdict(aggregator.clone)
+        self.aggregator = aggregator
+        self.aggregators: dict[str, Aggregator] = defaultdict(self.aggregator.clone)
 
     def update(  # pylint: disable=arguments-differ
         self, preds: Tensor, targets: Tensor, keys: list[str], **kwargs: Any
@@ -98,3 +99,7 @@ class AggregatedMetricCollection(MetricCollection):
         output = super().compute()
         super().reset()
         return output
+
+    def reset(self) -> None:
+        super().reset()
+        self.aggregators = defaultdict(self.aggregator.clone)
