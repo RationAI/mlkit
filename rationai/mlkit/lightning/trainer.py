@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, ParamSpec, cast
 
 import lightning as pl
@@ -56,3 +57,16 @@ class Trainer(pl.Trainer):
             )
 
         return super()._run(model, ckpt_path)
+
+    def predict(
+        self,
+        model: pl.LightningModule | None = None,
+        dataloaders: Any | pl.LightningDataModule | None = None,
+        datamodule: pl.LightningDataModule | None = None,
+        return_predictions: bool
+        | None = False,  # override default due to accumulation of results
+        ckpt_path: str | Path | None = None,
+    ) -> _PREDICT_OUTPUT | None:
+        return super().predict(
+            model, dataloaders, datamodule, return_predictions, ckpt_path
+        )
