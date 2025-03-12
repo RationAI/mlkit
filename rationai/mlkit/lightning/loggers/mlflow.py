@@ -17,7 +17,6 @@ from lightning.pytorch.callbacks.model_checkpoint import ModelCheckpoint
 from mlflow import MlflowClient
 from mlflow.models.model import MLMODEL_FILE_NAME
 from mlflow.pytorch import FLAVOR_NAME
-from mlflow.utils.file_utils import get_total_file_size
 from mlflow.utils.mlflow_tags import (
     MLFLOW_GIT_BRANCH,
     MLFLOW_GIT_COMMIT,
@@ -136,7 +135,7 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
                         "pytorch_version": str(torch.__version__),
                     }
                 },
-                model_size_bytes=get_total_file_size(path),
+                model_size_bytes=os.path.getsize(path),
             )
             mlflow_model.save(tmpdir / MLMODEL_FILE_NAME)
 
@@ -157,8 +156,10 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
             )
         }
 
-        # Log new checkpoints to MLFlow
-        for key in set(checkpoints).difference(logged_checkpoints):
+        # Log new checkpoints to MLFlow but ignore the last checkpoint
+        for key in set(checkpoints).difference(
+            set(logged_checkpoints) - {ModelCheckpoint.CHECKPOINT_NAME_LAST}
+        ):
             self._log_checkpoint(key, checkpoints[key])
 
         # Delete old MLFlow checkpoints (those no logger kept by trainer)

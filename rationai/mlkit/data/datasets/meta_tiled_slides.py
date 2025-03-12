@@ -117,4 +117,4 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             slides_dfs.append(slides)
             tiles_dfs.append(tiles)
 
-        return pd.concat(slides_dfs), pd.concat(tiles_dfs)
+        return pd.concat(slides_dfs).reset_index(), pd.concat(tiles_dfs).reset_index()

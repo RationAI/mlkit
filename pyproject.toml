@@ -5,6 +5,7 @@ description = ""
 authors = [
     { name = "Matěj Pekár", email = "matejpekar@mail.muni.cz" },
     { name = "Jakub Pekár", email = "jakubpekar@mail.muni.cz" },
+    { name = "Adam Kukučka", email = "adamkukucka@mail.muni.cz" },
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -16,6 +17,7 @@ dependencies = [
     "hydra-core>=1.3.2",
     "openslide-python>=1.3.1",
     "torch>=2.2.0",
+    "rationai-masks @ git+https://gitlab.ics.muni.cz/rationai/digital-pathology/libraries/masks.git",
 ]
 
 [tool.pdm.dev-dependencies]
