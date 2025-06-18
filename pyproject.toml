@@ -7,7 +7,7 @@ authors = [
     { name = "Jakub Pekár", email = "jakubpekar@mail.muni.cz" },
     { name = "Adam Kukučka", email = "adamkukucka@mail.muni.cz" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
