@@ -68,11 +68,14 @@ class OpenSlideTilesDataset(Dataset[NDArray[np.uint8]]):
             x = int(tile["x"] * slide.level_downsamples[level])
             y = int(tile["y"] * slide.level_downsamples[level])
 
+            bg_tile = Image.new(mode="RGB", size=(extent_x, extent_y), color="#FFFFFF")
             rgba_region = slide.read_region((x, y), level, (extent_x, extent_y))
-            rgb_region = Image.alpha_composite(
-                Image.new("RGBA", rgba_region.size, (255, 255, 255)), rgba_region
-            ).convert("RGB")
-            return np.array(rgb_region)
+
+            # Paste the RGBA region onto the background tile
+            # using the alpha channel as a mask to handle transparency.
+            bg_tile.paste(im=rgba_region, mask=rgba_region, box=None)
+
+            return np.array(bg_tile)
 
     def _get_from_tile(self, tile: pd.Series, key: int | str) -> int:
         return tile[key] if isinstance(key, str) else key
