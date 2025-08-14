@@ -1,34 +1,40 @@
 import io
+import re
 import sys
-from collections.abc import Iterable
+import traceback
+from collections.abc import Callable, Iterable
+from functools import partial
 from types import TracebackType
 from typing import Self, TextIO
+from unittest.mock import patch
 
 from rationai.mlkit.stream.stream_logger import StreamLogger
-from rationai.mlkit.stream.stream_modifier import StreamModifier
 
 
 class StreamCapture:
+    ANSI_ESCAPE_SEQ = re.compile(r"\x1b\[[0-9;]*m")
+
     def __init__(
-        self,
-        logger: StreamLogger,
-        streams: tuple[TextIO, ...] = (sys.stdout, sys.stderr),
+        self, logger: StreamLogger, streams: Iterable[TextIO] = (sys.stdout, sys.stderr)
     ) -> None:
         self.logger = logger
-        self.writer = io.StringIO()
-        self.streams_wrapped = [
-            StreamModifier(stream, id) for id, stream in enumerate(streams)
+        self._buffer = io.StringIO()
+        self._patchers = [
+            patch.multiple(
+                stream,
+                write=partial(self._write, stream_write=stream.write),
+                writelines=partial(
+                    self._writelines, stream_writelines=stream.writelines
+                ),
+                flush=partial(self._flush, stream_flush=stream.flush),
+            )
+            for stream in streams
         ]
 
-        self.last_writer_id: int | None = None
-
     def __enter__(self) -> Self:
-        self.streams = []
-        for stream in self.streams_wrapped:
-            stream.set_write(self.write)
-            stream.set_writelines(self.writelines)
-            stream.set_flush(self.flush)
-            self.streams.append(stream)
+        for patcher in self._patchers:
+            patcher.start()
+
         return self
 
     def __exit__(
@@ -37,59 +43,46 @@ class StreamCapture:
         excinst: BaseException | None,
         exctb: TracebackType | None,
     ) -> None:
-        # Synchronize the logger with the last output
-        self.logger.log_stream(self.writer.getvalue())
+        for patcher in self._patchers:
+            patcher.stop()
 
-        for stream in self.streams_wrapped:
-            stream.teardown()
+        if exctype is not None:
+            traceback_str = "".join(traceback.format_exception(exctype, excinst, exctb))
+            self._buffer.write(traceback_str)
 
-    def write(self, s: str, stream_id: int) -> None:
-        if self.last_writer_id != stream_id:
-            self.flush()
+        self.logger.log_stream(self._buffer.getvalue())
 
-            if self.last_writer_id is not None:
-                lines = self._get_lines()
-                if lines[-1]:
-                    lines.append("")
-                self._set_writer(lines)
+    def _write(self, s: str, stream_write: Callable[[str], int]) -> int:
+        result = stream_write(s)
 
-        self.last_writer_id = stream_id
+        s = self.ANSI_ESCAPE_SEQ.sub("", s)
 
-        if s == "\033[A":
-            # Jump up
-            lines = self._get_lines()
-            lines.pop()
-            self._set_writer(lines)
-        else:
-            new_lines = iter(s.split("\n"))
+        # # Move to the end of the buffer to write new content
+        self._buffer.seek(0, io.SEEK_END)
 
-            self._process_line(next(new_lines))
+        if "\r" in s:
+            # If there's a carriage return, we might need to overwrite a line
+            self._buffer.seek(0)
+            content = self._buffer.read()
+            last_newline = content.rfind("\n")
 
-            for line in new_lines:
-                self._process_line(line, new=True)
+            # Position the cursor at the beginning of the last line
+            self._buffer.seek(last_newline + 1)
+            self._buffer.truncate()  # Clear the last line
 
-    def writelines(self, lines: Iterable[str]) -> None:
-        self.writer.writelines(lines)
+            # Write the part of the string that comes after the last CR
+            s = s.rsplit("\r", 1)[-1]
 
-    def flush(self) -> None:
-        self.logger.log_stream(self.writer.getvalue())
+        self._buffer.write(s)
+        self.logger.log_stream(self._buffer.getvalue())
+        return result
 
-    def _get_lines(self) -> list[str]:
-        return self.writer.getvalue().split("\n") or [""]
+    def _writelines(
+        self, lines: Iterable[str], stream_writelines: Callable[[Iterable[str]], None]
+    ) -> None:
+        stream_writelines(lines)
+        self._buffer.writelines(lines)
 
-    def _process_line(self, s: str, new: bool = False) -> None:
-        carrages = s.split("\r")
-        lines = self._get_lines()
-
-        if new:
-            lines.append(carrages[-1])
-        else:
-            if len(carrages) > 1:
-                lines[-1] = carrages[-1]
-            else:
-                lines[-1] += carrages[-1]
-
-        self._set_writer(lines)
-
-    def _set_writer(self, lines: list[str]) -> None:
-        self.writer = io.StringIO("\n".join(lines))
+    def _flush(self, stream_flush: Callable[[], None]) -> None:
+        stream_flush()
+        self.logger.log_stream(self._buffer.getvalue())

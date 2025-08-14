@@ -1,6 +1,6 @@
 [project]
 name = "rationai-mlkit"
-version = "0.2.0"
+version = "0.2.1"
 description = ""
 authors = [
     { name = "Matěj Pekár", email = "matejpekar@mail.muni.cz" },
@@ -20,17 +20,5 @@ dependencies = [
     "rationai-masks @ git+https://gitlab.ics.muni.cz/rationai/digital-pathology/libraries/masks.git",
 ]
 
-[tool.pdm.dev-dependencies]
-dev = ["mypy", "pre-commit", "ruff"]
-
-
-[tool.pdm.scripts]
-l = { composite = ["lint", "format", "mypy"] }
-lint = "ruff check --fix"
-format = "ruff format"
-mypy = "mypy ."
-post_install = { composite = [
-    "pre-commit autoupdate",
-    "pre-commit install",
-    "pre-commit install --hook-type commit-msg",
-] }
+[tool.uv]
+dev-dependencies = ["mypy", "pre-commit", "ruff"]
