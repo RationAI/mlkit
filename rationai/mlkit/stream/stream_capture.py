@@ -2,13 +2,23 @@ import io
 import re
 import sys
 import traceback
-from collections.abc import Callable, Iterable
-from functools import partial
+from collections.abc import Iterable
+from functools import wraps
 from types import TracebackType
 from typing import Self, TextIO
 from unittest.mock import patch
 
 from rationai.mlkit.stream.stream_logger import StreamLogger
+
+
+def create_wrapper(original_method, custom_handler):
+    @wraps(original_method)
+    def wrapper(*args, **kwargs):
+        result = original_method(*args, **kwargs)
+        custom_handler(*args, **kwargs)
+        return result
+
+    return wrapper
 
 
 class StreamCapture:
@@ -19,14 +29,13 @@ class StreamCapture:
     ) -> None:
         self.logger = logger
         self._buffer = io.StringIO()
+
         self._patchers = [
             patch.multiple(
                 stream,
-                write=partial(self._write, stream_write=stream.write),
-                writelines=partial(
-                    self._writelines, stream_writelines=stream.writelines
-                ),
-                flush=partial(self._flush, stream_flush=stream.flush),
+                write=create_wrapper(stream.write, self.write),
+                writelines=create_wrapper(stream.writelines, self.writelines),
+                flush=create_wrapper(stream.flush, self.flush),
             )
             for stream in streams
         ]
@@ -50,11 +59,9 @@ class StreamCapture:
             traceback_str = "".join(traceback.format_exception(exctype, excinst, exctb))
             self._buffer.write(traceback_str)
 
-        self.logger.log_stream(self._buffer.getvalue())
+        self.flush()
 
-    def _write(self, s: str, stream_write: Callable[[str], int]) -> int:
-        result = stream_write(s)
-
+    def write(self, s: str) -> None:
         s = self.ANSI_ESCAPE_SEQ.sub("", s)
 
         # # Move to the end of the buffer to write new content
@@ -74,15 +81,10 @@ class StreamCapture:
             s = s.rsplit("\r", 1)[-1]
 
         self._buffer.write(s)
-        self.logger.log_stream(self._buffer.getvalue())
-        return result
+        self.flush()
 
-    def _writelines(
-        self, lines: Iterable[str], stream_writelines: Callable[[Iterable[str]], None]
-    ) -> None:
-        stream_writelines(lines)
+    def writelines(self, lines: Iterable[str]) -> None:
         self._buffer.writelines(lines)
 
-    def _flush(self, stream_flush: Callable[[], None]) -> None:
-        stream_flush()
+    def flush(self) -> None:
         self.logger.log_stream(self._buffer.getvalue())
