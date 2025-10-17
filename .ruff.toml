@@ -1,6 +1,7 @@
 fix = true
 line-length = 88
 target-version = "py311"
+namespace-packages = ["rationai"]
 
 [format]
 # Enable reformatting of code snippets in docstrings.
