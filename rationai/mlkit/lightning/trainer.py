@@ -22,7 +22,7 @@ def _copy_kwargs(
     _: Callable[P, None],
 ) -> Callable[[Callable[..., None]], Callable[P, None]]:
     def return_func(func: Callable[..., None]) -> Callable[P, None]:
-        return cast(Callable[P, None], func)
+        return cast("Callable[P, None]", func)
 
     return return_func
 
