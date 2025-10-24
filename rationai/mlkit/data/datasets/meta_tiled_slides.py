@@ -38,9 +38,9 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
                 `slides.parquet` and `tiles.parquet`.
             slides_and_tiles: Tuple containing the slides and tiles DataFrames.
         """
-        assert (
-            paths or uris or slides_and_tiles
-        ), "At least one of paths, uris or slides_and_tiles must be provided."
+        assert paths or uris or slides_and_tiles, (
+            "At least one of paths, uris or slides_and_tiles must be provided."
+        )
 
         self.slides, self.tiles = self.load_slides_and_tiles(paths or [], uris or [])
 

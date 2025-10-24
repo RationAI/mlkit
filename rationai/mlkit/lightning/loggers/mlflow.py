@@ -67,6 +67,12 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def log_stream(self, text: str) -> None:
         self.experiment.log_text(self.run_id, text, MLFLOW_CONSOLE_LOG)
 
+    def log_artifact(self, local_path: str, artifact_path: str | None = None) -> None:
+        self.experiment.log_artifact(self.run_id, local_path, artifact_path)
+
+    def log_artifacts(self, local_dir: str, artifact_path: str | None = None) -> None:
+        self.experiment.log_artifacts(self.run_id, local_dir, artifact_path)
+
     def log_table(self, data: dict[str, Any], artifact_file: str) -> None:
         """Logs a json table to mlflow as an artifact that can be viewed in the mlflow evaluation.
 
