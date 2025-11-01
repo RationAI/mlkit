@@ -8,17 +8,17 @@ from typing import overload
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
-from lightning.pytorch.loggers import Logger, MLFlowLogger
 from omegaconf import DictConfig, OmegaConf
 
-from rationai.mlkit.stream import StreamCapture, StreamLogger
+from rationai.mlkit.lightning.loggers import MLFlowLogger
+from rationai.mlkit.stream import StreamCapture
 
 
 log = logging.getLogger(__name__)
 
 
 WrapperT = Callable[[DictConfig], None]
-FunctionT = Callable[[DictConfig, Logger | None], None]
+FunctionT = Callable[[DictConfig, MLFlowLogger], None]
 
 
 @overload
@@ -62,26 +62,28 @@ def autolog(
 
     @wraps(func)
     def wrapper(config: DictConfig) -> None:
-        if hasattr(config, "logger"):
-            logger = hydra.utils.instantiate(config.logger)
-        else:
-            return func(config, None)
+        logger: MLFlowLogger = hydra.utils.instantiate(config.logger)
 
         if log_config:
             _log_config(config, logger)
 
-        if log_hyperparams:
-            _log_hyperparams(config, logger)
+        if (
+            log_hyperparams
+            and hasattr(config, "metadata")
+            and hasattr(config.metadata, "hyperparams")
+        ):
+            logger.log_hyperparams(config.metadata.hyperparams)
 
         if log_stream:
-            return _log_stream(logger, partial(func, config, logger))
+            with StreamCapture(logger):
+                return func(config, logger)
 
         return func(config, logger)
 
     return wrapper
 
 
-def _log_config(config: DictConfig, logger: Logger) -> None:
+def _log_config(config: DictConfig, logger: MLFlowLogger) -> None:
     """Logs the hydra config."""
     with tempfile.TemporaryDirectory(dir=os.getcwd()) as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
@@ -94,29 +96,4 @@ def _log_config(config: DictConfig, logger: Logger) -> None:
         with open(tmp_dir / "config-resolved.yaml", "w", encoding="utf-8") as file:
             OmegaConf.save(config, file, resolve=True)
 
-        if isinstance(logger, MLFlowLogger):
-            logger.experiment.log_artifacts(logger.run_id, tmp_dir, "configs")
-        else:
-            log.warning(
-                "The %s logger is not supported for logging the configuration",
-                logger,
-            )
-
-
-def _log_stream(logger: Logger | StreamLogger, func: Callable[[], None]) -> None:
-    """Logs the std streams using the logger."""
-    if isinstance(logger, StreamLogger):
-        with StreamCapture(logger):
-            return func()
-
-    log.warning("The %s logger is not supported for logging the std streams", logger)
-    return func()
-
-
-def _log_hyperparams(config: DictConfig, logger: Logger) -> None:
-    if (
-        isinstance(logger, MLFlowLogger)
-        and hasattr(config, "metadata")
-        and hasattr(config.metadata, "hyperparams")
-    ):
-        logger.log_hyperparams(config.metadata.hyperparams)
+        logger.log_artifacts(tmp_dir_str, "configs")
