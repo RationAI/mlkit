@@ -18,7 +18,7 @@ ARTIFACTS_DOWNLOAD_PATH = "mlflow_artifacts/checkpoints"
 P = ParamSpec("P")
 
 
-def _copy_kwargs(
+def _copy_kwargs[**P](
     _: Callable[P, None],
 ) -> Callable[[Callable[..., None]], Callable[P, None]]:
     def return_func(func: Callable[..., None]) -> Callable[P, None]:
