@@ -44,7 +44,10 @@ class Trainer(pl.Trainer):
         super().__init__(callbacks=callbacks, **kwargs)
 
     def _run(
-        self, model: pl.LightningModule, ckpt_path: _PATH | None = None
+        self,
+        model: pl.LightningModule,
+        ckpt_path: _PATH | None = None,
+        weights_only: bool | None = None,
     ) -> _EVALUATE_OUTPUT | _PREDICT_OUTPUT | None:
         if isinstance(ckpt_path, str) and ckpt_path.startswith(ARTIFACTS_PREFIX):
             if not isinstance(self.logger, MLFlowLogger):
@@ -56,7 +59,7 @@ class Trainer(pl.Trainer):
                 tracking_uri=self.logger._tracking_uri,
             )
 
-        return super()._run(model, ckpt_path)
+        return super()._run(model, ckpt_path=ckpt_path, weights_only=weights_only)
 
     def predict(
         self,
@@ -66,7 +69,8 @@ class Trainer(pl.Trainer):
         return_predictions: bool
         | None = False,  # override default due to accumulation of results
         ckpt_path: str | Path | None = None,
+        weights_only: bool | None = None,
     ) -> _PREDICT_OUTPUT | None:
         return super().predict(
-            model, dataloaders, datamodule, return_predictions, ckpt_path
+            model, dataloaders, datamodule, return_predictions, ckpt_path, weights_only
         )
