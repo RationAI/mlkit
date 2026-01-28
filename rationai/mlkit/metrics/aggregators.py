@@ -54,36 +54,31 @@ class MeanAggregator(Aggregator):
         return self.preds / self.count, self.targets / self.count
 
 
-class MeanPoolMaxAggregator(Aggregator):
-    """Aggregator to compute the max of predictions after average pooling.
+class HeatmapAggregator(Aggregator):
+    preds: list[Tensor]
+    targets: list[Tensor]
+    xs: list[Tensor]
+    ys: list[Tensor]
 
-    Targets are assumed to be the same for all predictions. Therefore, only the first
-    target is used for the aggregation.
-
-    Predictions are transformed into heatmap with `HeatmapAssembler` and then pooled
-    using `nn.AvgPool2d`. The aggregated value is the maximum value of the pooled
-    heatmap.
+    """Abstract aggregator covering the prediction heatmap generation.
 
     Arguments:
-        kernel_size (int): Size of the pooling kernel.
         extent_tile (int): Size of the tile.
-        stride (int): Stride of the pooling operation
+        stride_tile (int): Tile stride.
     """
 
     def __init__(
         self,
-        kernel_size: int,
         extent_tile: int,
-        stride: int,
+        stride_tile: int,
     ) -> None:
         super().__init__()
         self.add_state("preds", default=[], dist_reduce_fx="cat")
         self.add_state("targets", default=[], dist_reduce_fx="cat")
         self.add_state("xs", default=[], dist_reduce_fx="cat")
         self.add_state("ys", default=[], dist_reduce_fx="cat")
-        self.pool = nn.AvgPool2d(kernel_size, stride=1)
         self.extent_tile = extent_tile
-        self.stride = stride
+        self.stride_tile = stride_tile
 
     def update(self, preds: Tensor, targets: Tensor, **kwargs: Any) -> None:
         self.preds.append(preds)
@@ -93,27 +88,76 @@ class MeanPoolMaxAggregator(Aggregator):
         self.xs.append(kwargs["x"])
         self.ys.append(kwargs["y"])
 
-    def _get_extents(self) -> tuple[int, int]:
-        extent_x = max(x + self.extent_tile for x in self.xs)
-        extent_y = max(y + self.extent_tile for y in self.ys)
+    def _get_extents(self, xs: Tensor, ys: Tensor) -> tuple[int, int]:
+        extent_x = (xs + self.extent_tile).max().item()
+        extent_y = (ys + self.extent_tile).max().item()
+        return int(extent_x), int(extent_y)
 
-        return extent_x, extent_y
-
-    def compute(self) -> tuple[Tensor, Tensor]:
-        extent_x, extent_y = self._get_extents()
+    def _get_heatmap(self) -> Tensor:
+        xs = torch.cat(self.xs)
+        ys = torch.cat(self.ys)
+        extent_x, extent_y = self._get_extents(xs, ys)
         assembler = HeatmapAssembler(
             extent_x,
             extent_y,
             self.extent_tile,
             self.extent_tile,
-            self.stride,
-            self.stride,
-            device=self.preds[0].device if self.preds else "cpu",
+            self.stride_tile,
+            self.stride_tile,
+            device=str(self.preds[0].device) if self.preds else "cpu",
         )
-        assembler.update(
-            torch.cat(self.preds), torch.stack(self.xs), torch.stack(self.ys)
-        )
+        assembler.update(torch.cat(self.preds), xs, ys)
+        return assembler.compute()
+
+
+class MeanPoolMaxAggregator(HeatmapAggregator):
+    """Aggregator to compute the max of predictions after average pooling of the prediction heatmap.
+
+    Arguments:
+        kernel_size (int): Size of the pooling kernel.
+        extent_tile (int): Size of the tile.
+        stride_tile (int): Tile stride.
+    """
+
+    def __init__(
+        self,
+        kernel_size: int,
+        extent_tile: int,
+        stride_tile: int,
+    ) -> None:
+        super().__init__(extent_tile, stride_tile)
+        self.pool = nn.AvgPool2d(kernel_size, stride=1)
+
+    def compute(self) -> tuple[Tensor, Tensor]:
+        heatmap = self._get_heatmap()
         return (
-            self.pool(assembler.compute().unsqueeze(0).unsqueeze(0)).max(),
-            torch.stack(self.targets).max(),
+            self.pool(heatmap.unsqueeze(0).unsqueeze(0)).max(),
+            torch.cat(self.targets).max(),
+        )
+
+
+class TopKAggregator(HeatmapAggregator):
+    """Aggregator to compute the mean of top k predictions after average pooling of the prediction heatmap.
+
+    Arguments:
+        kernel_size (int): Size of the pooling kernel.
+        extent_tile (int): Size of the tile.
+        stride_tile (int): Tile stride.
+        k (int): Number of top predictions to take the mean from.
+    """
+
+    def __init__(
+        self, kernel_size: int, extent_tile: int, stride_tile: int, k: int
+    ) -> None:
+        super().__init__(extent_tile, stride_tile)
+        self.pool = nn.AvgPool2d(kernel_size, stride=1)
+        self.k = k
+
+    def compute(self) -> tuple[Tensor, Tensor]:
+        heatmap = self._get_heatmap()
+        pooled_values = self.pool(heatmap.unsqueeze(0).unsqueeze(0)).squeeze().flatten()
+        topk_vals, _ = torch.topk(pooled_values, self.k)
+        return (
+            topk_vals.mean(),
+            torch.cat(self.targets).max(),
         )
