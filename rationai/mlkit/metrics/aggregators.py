@@ -19,21 +19,24 @@ class Aggregator(Metric, ABC):
 class MaxAggregator(Aggregator):
     """Aggregator to compute the maximum value of predictions and targets."""
 
+    max_pred: Tensor
+    max_target: Tensor
+
     def __init__(self) -> None:
         super().__init__()
         self.add_state(
-            "preds", default=torch.tensor(float("-inf")), dist_reduce_fx="max"
+            "max_pred", default=torch.tensor(float("-inf")), dist_reduce_fx="max"
         )
         self.add_state(
-            "targets", default=torch.tensor(float("-inf")), dist_reduce_fx="max"
+            "max_target", default=torch.tensor(float("-inf")), dist_reduce_fx="max"
         )
 
     def update(self, preds: Tensor, targets: Tensor, **kwargs: Any) -> None:
-        self.preds = torch.max(self.preds, preds)
-        self.targets = torch.max(self.targets, targets)
+        self.max_pred = torch.max(self.max_pred, preds.max())
+        self.max_target = torch.max(self.max_target, targets.max())
 
     def compute(self) -> tuple[Tensor, Tensor]:
-        return self.preds, self.targets
+        return self.max_pred, self.max_target
 
 
 class MeanAggregator(Aggregator):
