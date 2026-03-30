@@ -77,24 +77,23 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
         # Get the underlying Arrow table (zero-copy)
         table = tiles.data.table
-
         # Since it's sorted, we only care about where 'slide_id' changes.
         slide_ids = table.column("slide_id")
 
-        # Find unique values and their counts
-        counts = pc.value_counts(slide_ids)  # pyright: ignore[reportAttributeAccessIssue]
+        # Since the dataset is sorted by 'slide_id', we can use
+        # run-end encoding to find group boundaries efficiently.
+        run_ends = pc.run_end_encode(slide_ids)  # pyright: ignore[reportAttributeAccessIssue]
+
+        values = run_ends.values
+        ends = run_ends.run_ends
 
         index_map = {}
         current_offset = 0
 
-        # counts is a StructArray of {values: T, counts: int64}
-        for count in counts:
-            pair = count.as_py()
-            sid = pair["values"]
-            offset = pair["counts"]
-
-            index_map[sid] = range(current_offset, current_offset + offset)
-            current_offset += offset
+        for sid, end in zip(values, ends, strict=True):
+            end_py = end.as_py()
+            index_map[sid.as_py()] = range(current_offset, end_py)
+            current_offset = end_py
 
         return index_map
 
