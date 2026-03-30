@@ -1,6 +1,6 @@
 [project]
 name = "rationai-mlkit"
-version = "0.3.1"
+version = "0.4.0"
 description = ""
 authors = [
     { name = "Matěj Pekár", email = "matejpekar@mail.muni.cz" },
@@ -15,7 +15,7 @@ dependencies = [
     "gitpython>=3.1.45",
     "hydra-core>=1.3.2",
     "lightning>=2.6.0",
-    "mlflow<3.0.0",
+    "mlflow>=3.10.1",
     "openslide-python>=1.4.2",
     "pyarrow>=23.0.1",
     "rationai-masks",
