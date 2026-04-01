@@ -82,7 +82,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
         # Since the dataset is sorted by 'slide_id', we can use
         # run-end encoding to find group boundaries efficiently.
-        run_ends = pc.run_end_encode(slide_ids)  # pyright: ignore[reportAttributeAccessIssue]
+        run_ends = pc.run_end_encode(slide_ids.combine_chunks())  # pyright: ignore[reportAttributeAccessIssue]
 
         values = run_ends.values
         ends = run_ends.run_ends
