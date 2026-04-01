@@ -75,10 +75,8 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         if len(tiles) == 0:
             return {}
 
-        # Get the underlying Arrow table (zero-copy)
-        table = tiles.data.table
         # Since it's sorted, we only care about where 'slide_id' changes.
-        slide_ids = table.column("slide_id")
+        slide_ids = tiles.data.column("slide_id")
 
         # Since the dataset is sorted by 'slide_id', we can use
         # run-end encoding to find group boundaries efficiently.
