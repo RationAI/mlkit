@@ -75,14 +75,16 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         if len(tiles) == 0:
             return {}
 
-        # Get the underlying Arrow table (zero-copy)
+        # Get the underlying Arrow table
         table = tiles.data.table
-        # Since it's sorted, we only care about where 'slide_id' changes.
         slide_ids = table.column("slide_id")
 
-        # Since the dataset is sorted by 'slide_id', we can use
-        # run-end encoding to find group boundaries efficiently.
-        run_ends = pc.run_end_encode(slide_ids.combine_chunks())  # pyright: ignore[reportAttributeAccessIssue]
+        # FIX: Cast to large_string to prevent 32-bit offset overflow (2GB limit)
+        # we use pc.cast because slide_ids is a ChunkedArray
+        large_slide_ids = pc.cast(slide_ids, pa.large_string())
+
+        # Now combine_chunks will work because it uses 64-bit offsets
+        run_ends = pc.run_end_encode(large_slide_ids.combine_chunks())
 
         values = run_ends.values
         ends = run_ends.run_ends
