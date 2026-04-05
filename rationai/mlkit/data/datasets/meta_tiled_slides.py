@@ -81,7 +81,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
         # FIX: Cast to large_string to prevent 32-bit offset overflow (2GB limit)
         # we use pc.cast because slide_ids is a ChunkedArray
-        large_slide_ids = pc.cast(slide_ids, pa.large_string())
+        large_slide_ids = pc.cast(slide_ids, pa.large_binary())
 
         # Now combine_chunks will work because it uses 64-bit offsets
         run_ends = pc.run_end_encode(large_slide_ids.combine_chunks())
