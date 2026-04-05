@@ -9,7 +9,7 @@ from datasets import Dataset as HFDataset
 from datasets import concatenate_datasets, load_dataset
 from mlflow.artifacts import download_artifacts
 from torch.utils.data import ConcatDataset, Dataset
-
+import pyarrow as pa
 
 T = TypeVar("T", covariant=True)
 
