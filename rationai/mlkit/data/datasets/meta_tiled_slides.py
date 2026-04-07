@@ -75,16 +75,21 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         if len(tiles) == 0:
             return {}
 
-        # Get the underlying Arrow table
-        table = tiles.data.table
-        slide_ids = table.column("slide_id")
+        # 1. Access the column while respecting the Sort Indices
+        # This returns a ChunkedArray
+        slide_ids = tiles.with_format("arrow")["slide_id"]
 
-        # FIX: Cast to large_string to prevent 32-bit offset overflow (2GB limit)
-        # we use pc.cast because slide_ids is a ChunkedArray
-        large_slide_ids = pc.cast(slide_ids, pa.large_binary())
+        # 2. Handle the "Large" type conversion dynamically
+        current_type = slide_ids.type
+        type_map = {
+            pa.string(): pa.large_string(),
+            pa.binary(): pa.large_binary()
+        }
+        target_type = type_map.get(current_type, current_type)
 
-        # Now combine_chunks will work because it uses 64-bit offsets
-        run_ends = pc.run_end_encode(large_slide_ids.combine_chunks())
+        # 3. Perform the Run-End Encoding
+        # Cast to avoid 2GB limits and combine chunks for the encoder
+        run_ends = pc.run_end_encode(pc.cast(slide_ids, target_type).combine_chunks())
 
         values = run_ends.values
         ends = run_ends.run_ends
