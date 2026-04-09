@@ -76,15 +76,30 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         if len(tiles) == 0:
             return {}
 
+        # 1. Grab the column directly from the underlying PyArrow Table
         slide_ids = tiles.data.column("slide_id")
+        num_rows = len(slide_ids)
 
-        # FIX 3: Group indices without sorting the underlying dataset.
-        # Converting the single PyArrow column to Pandas is extremely fast.
-        df = slide_ids.to_pandas(name="slide_id").to_frame()
-        df['idx'] = np.arange(len(df))
+        # 2. Generate sequential row indices
+        # np.arange is used here because PyArrow can wrap it instantly with zero-copy overhead
+        row_indices = pa.array(np.arange(num_rows, dtype=np.int64))
 
-        # Group by slide_id and aggregate the physical indices into lists
-        return df.groupby("slide_id")['idx'].apply(list).to_dict()
+        # 3. Combine them into a lightweight PyArrow Table
+        table = pa.Table.from_arrays(
+            [slide_ids, row_indices], 
+            names=["slide_id", "idx"]
+        )
+
+        # 4. Perform the native Arrow groupby and aggregate
+        # The "list" function aggregates all indices for a given slide_id into a single Arrow List scalar
+        grouped = table.group_by("slide_id").aggregate([("idx", "list")])
+
+        # 5. Extract to a Python dictionary
+        # PyArrow automatically names the aggregated column "idx_list" (pattern: {column}_{agg_func})
+        keys = grouped.column("slide_id").to_pylist()
+        values = grouped.column("idx_list").to_pylist()
+
+        return dict(zip(keys, values, strict=True))
 
     @abstractmethod
     def generate_datasets(self) -> Iterable[Dataset[T]]:
