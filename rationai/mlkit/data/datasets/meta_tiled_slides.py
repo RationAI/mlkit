@@ -10,6 +10,7 @@ from datasets import concatenate_datasets, load_dataset
 from mlflow.artifacts import download_artifacts
 from torch.utils.data import ConcatDataset, Dataset
 import pyarrow as pa
+import numpy as np
 
 T = TypeVar("T", covariant=True)
 
@@ -52,7 +53,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             tiles = concatenate_datasets([tiles, slides_and_tiles[1]])
 
         self.slides = slides
-        self.tiles = tiles.sort("slide_id")
+        self.tiles = tiles
         self._slide_id_to_indices = self._build_tile_index(self.tiles)
 
         super().__init__(self.generate_datasets())
@@ -75,34 +76,15 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         if len(tiles) == 0:
             return {}
 
-        # 1. Access the column while respecting the Sort Indices
-        # This returns a ChunkedArray
-        slide_ids = tiles.with_format("arrow")["slide_id"]
+        slide_ids = tiles.data.column("slide_id")
 
-        # 2. Handle the "Large" type conversion dynamically
-        current_type = slide_ids.type
-        type_map = {
-            pa.string(): pa.large_string(),
-            pa.binary(): pa.large_binary()
-        }
-        target_type = type_map.get(current_type, current_type)
+        # FIX 3: Group indices without sorting the underlying dataset.
+        # Converting the single PyArrow column to Pandas is extremely fast.
+        df = slide_ids.to_pandas(name="slide_id").to_frame()
+        df['idx'] = np.arange(len(df))
 
-        # 3. Perform the Run-End Encoding
-        # Cast to avoid 2GB limits and combine chunks for the encoder
-        run_ends = pc.run_end_encode(pc.cast(slide_ids, target_type).combine_chunks())
-
-        values = run_ends.values
-        ends = run_ends.run_ends
-
-        index_map = {}
-        current_offset = 0
-
-        for sid, end in zip(values, ends, strict=True):
-            end_py = end.as_py()
-            index_map[sid.as_py()] = range(current_offset, end_py)
-            current_offset = end_py
-
-        return index_map
+        # Group by slide_id and aggregate the physical indices into lists
+        return df.groupby("slide_id")['idx'].apply(list).to_dict()
 
     @abstractmethod
     def generate_datasets(self) -> Iterable[Dataset[T]]:
