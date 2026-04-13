@@ -69,17 +69,17 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         super().__init__(self.generate_datasets())
 
     @staticmethod
-    def _build_tile_index(tiles: HFDataset) -> dict[str, range]:
+    def _build_tile_index(tiles: HFDataset) -> dict[str | bytes, pa.ListScalar]:
         """Creates a fast lookup table for slide indices.
 
-        This function builds a mapping from `slide_id` to the range of indices in the
+        This function builds a mapping from `slide_id` to the list of indices in the
         `tiles` dataset that correspond to that slide.
 
         Args:
             tiles: A dataset containing a `slide_id` column.
 
         Returns:
-            A dictionary mapping each `slide_id` to a range of indices in the `tiles` dataset.
+            A dictionary mapping each `slide_id` to a list of indices in the `tiles` dataset.
         """
         if len(tiles) == 0:
             return {}
@@ -134,7 +134,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             ```
         """
 
-    def filter_tiles_by_slide(self, slide_id: str) -> HFDataset:
+    def filter_tiles_by_slide(self, slide_id: str | bytes) -> HFDataset:
         """Returns a view of the dataset using a slice or indices.
 
         This function creates a view of the `self.tiles` dataset that contains only
@@ -148,7 +148,6 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         Returns:
             A view of the tiles dataset containing only the tiles for the specified slide.
         """
-        # We consruct it only once
         tile_indices = self._slide_id_to_indices.get(slide_id, pa.scalar([]))
         return self.tiles.select(tile_indices.as_py())
 
