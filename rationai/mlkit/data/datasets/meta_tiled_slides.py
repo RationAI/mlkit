@@ -32,7 +32,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         paths: Iterable[Path | str] | None = None,
         uris: Iterable[str] | None = None,
         slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
-        hf_kwargs: dict[str, Any] | None = None
+        hf_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """Load slides and tiles from MLFlow artifacts.
 
