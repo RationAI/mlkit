@@ -168,9 +168,6 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
                 for path in search_dirs
             ]
 
-        slide_files = MetaTiledSlides.resolve_search_path(search_dirs, "slides")
-        tile_files = MetaTiledSlides.resolve_search_path(search_dirs, "tiles")
-
         try:
             # Load datasets with memory mapping (lazy)
             loader_kwargs = {"path": "parquet", "split": "train"}
@@ -178,19 +175,19 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             slides_ds = concatenate_datasets(
                 [
                     load_dataset(**loader_kwargs, **datasource)
-                    for datasource in slide_files
+                    for datasource in resolve_search_path("slides")
                 ]
             )
 
             tiles_ds = concatenate_datasets(
                 [
                     load_dataset(**loader_kwargs, **datasource)
-                    for datasource in tile_files
+                    for datasource in resolve_search_path("tiles")
                 ]
             )
 
             return slides_ds, tiles_ds
 
         except Exception as e:
-            msg = f"Failed to load Parquet files. Found {len(slide_files)} slides and {len(tile_files)} tiles."
+            msg = "Failed to load Parquet files."
             raise FileNotFoundError(msg) from e
