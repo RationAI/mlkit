@@ -66,7 +66,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         `tiles` dataset that correspond to that slide.
 
         Args:
-            tiles: A dataset containing a `slide_id` column, sorted by `slide_id`.
+            tiles: A dataset containing a `slide_id` column.
 
         Returns:
             A dictionary mapping each `slide_id` to a range of indices in the `tiles` dataset.
@@ -78,25 +78,32 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         slide_ids = tiles.data.column("slide_id")
         num_rows = len(slide_ids)
 
-        # 2. Generate sequential row indices
+        # 2. Handle the "Large" type conversion
+        current_type = slide_ids.type
+        if pa.types.is_string(current_type):
+            slide_ids = slide_ids.cast(pa.large_string())
+        elif pa.types.is_binary(current_type):
+            slide_ids = slide_ids.cast(pa.large_binary())
+
+        # 3. Generate sequential row indices
         # np.arange is used here because PyArrow can wrap it instantly with zero-copy overhead
         row_indices = pa.array(np.arange(num_rows, dtype=np.int64))
 
-        # 3. Combine them into a lightweight PyArrow Table
+        # 4. Combine them into a lightweight PyArrow Table
         table = pa.Table.from_arrays(
             [slide_ids, row_indices], names=["slide_id", "idx"]
         )
 
-        # 4. Perform the native Arrow groupby and aggregate
+        # 5. Perform the native Arrow groupby and aggregate
         # The "list" function aggregates all indices for a given slide_id into a single Arrow List scalar
         grouped = table.group_by("slide_id").aggregate([("idx", "list")])
 
-        # 5. Extract to a Python dictionary
-        # PyArrow automatically names the aggregated column "idx_list" (pattern: {column}_{agg_func})
+        # 6. Extract keys to Python, but KEEP values as PyArrow ListScalars
         keys = grouped.column("slide_id").to_pylist()
-        values = grouped.column("idx_list").to_pylist()
+        values_array = grouped.column("idx_list")
 
-        return dict(zip(keys, values, strict=True))
+        # Map the string key to the PyArrow ListScalar
+        return {key: values_array[i] for i, key in enumerate(keys)}
 
     @abstractmethod
     def generate_datasets(self) -> Iterable[Dataset[T]]:
@@ -131,8 +138,9 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         Returns:
             A view of the tiles dataset containing only the tiles for the specified slide.
         """
-        tile_range = self._slide_id_to_indices.get(slide_id, range(0))
-        return self.tiles.select(tile_range)
+        # We consruct it only once
+        tile_indices = self._slide_id_to_indices.get(slide_id, pa.scalar([]))
+        return self.tiles.select(tile_indices.as_py())
 
     @staticmethod
     def load_slides_and_tiles(
@@ -159,6 +167,10 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             )
 
         search_dirs = [Path(p) for p in (*paths, *artifacts_paths)]
+
+        # Handle empty datasets
+        if not len(search_dirs):
+            return HFDataset.from_dict({}), HFDataset.from_dict({})
 
         def resolve_search_path(partition: str) -> list[dict[str, str]]:
             return [
