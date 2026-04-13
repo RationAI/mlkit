@@ -148,8 +148,8 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         Returns:
             A view of the tiles dataset containing only the tiles for the specified slide.
         """
-        tile_indices = self._slide_id_to_indices.get(slide_id, pa.scalar([]))
-        return self.tiles.select(tile_indices.to_numpy())
+        tile_indices = self._slide_id_to_indices.get(slide_id, pa.scalar([], type=pa.list_(pa.int64())))
+        return self.tiles.select(tile_indices.values.to_numpy())
 
     @staticmethod
     def load_slides_and_tiles(
