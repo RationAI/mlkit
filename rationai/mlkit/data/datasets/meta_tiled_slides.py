@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 import pyarrow as pa
@@ -32,21 +32,31 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         paths: Iterable[Path | str] | None = None,
         uris: Iterable[str] | None = None,
         slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
+        hf_kwargs: dict[str, Any] | None = None
     ) -> None:
         """Load slides and tiles from MLFlow artifacts.
 
         Args:
             paths: List of directories to load slides and tiles from. Each
-                directory must include two files: `slides.parquet` and tiles.parquet`.
+                directory must include either single files (`slides.parquet`
+                and `tiles.parquet`) or subdirectories (`slides/` and `tiles/`)
+                containing chunked Parquet files.
             uris: List of MLFlow artifact URIs pointing to folders containing
-                `slides.parquet` and `tiles.parquet`.
+                either single files (`slides.parquet` and `tiles.parquet`) or
+                subdirectories (`slides/` and `tiles/`) containing chunked
+                Parquet files.
             slides_and_tiles: Tuple containing the slides and tiles Datasets.
+            hf_kwargs: Additional keyword arguments to pass to HuggingFace's
+                `load_dataset` function. Defaults to `{"path": "parquet", "split": "train"}`.
         """
         assert paths or uris or slides_and_tiles, (
             "At least one of paths, uris or slides_and_tiles must be provided."
         )
 
-        slides, tiles = self.load_slides_and_tiles(paths or [], uris or [])
+        if hf_kwargs is None:
+            hf_kwargs = {"path": "parquet", "split": "train"}
+
+        slides, tiles = self.load_slides_and_tiles(paths or [], uris or [], hf_kwargs)
 
         if slides_and_tiles is not None:
             slides = concatenate_datasets([slides, slides_and_tiles[0]])
@@ -144,15 +154,21 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
     @staticmethod
     def load_slides_and_tiles(
-        paths: Iterable[str | Path], uris: Iterable[str]
+        paths: Iterable[str | Path], uris: Iterable[str], hf_kwargs: dict[str, Any]
     ) -> tuple[HFDataset, HFDataset]:
         """Load slides and tiles parquets from local storage and MLFlow artifacts.
 
         Args:
             paths: List of directories to load slides and tiles from. Each
-                directory must include two files: `slides.parquet` and tiles.parquet`.
+                directory must include either single files (`slides.parquet`
+                and `tiles.parquet`) or subdirectories (`slides/` and `tiles/`)
+                containing chunked Parquet files.
             uris: List of MLFlow artifact URIs pointing to folders containing
-                `slides.parquet` and `tiles.parquet` or chunks.
+                either single files (`slides.parquet` and `tiles.parquet`) or
+                subdirectories (`slides/` and `tiles/`) containing chunked
+                Parquet files.
+            hf_kwargs: Additional keyword arguments to pass to HuggingFace's
+                `load_dataset` function.
 
         Raises:
             FileNotFoundError: If the data cannot be loaded from the specified URIs.
@@ -181,19 +197,16 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             ]
 
         try:
-            # Load datasets with memory mapping (lazy)
-            loader_kwargs = {"path": "parquet", "split": "train"}
-
             slides_ds = concatenate_datasets(
                 [
-                    load_dataset(**loader_kwargs, **datasource)
+                    load_dataset(**hf_kwargs, **datasource)
                     for datasource in resolve_search_path("slides")
                 ]
             )
 
             tiles_ds = concatenate_datasets(
                 [
-                    load_dataset(**loader_kwargs, **datasource)
+                    load_dataset(**hf_kwargs, **datasource)
                     for datasource in resolve_search_path("tiles")
                 ]
             )
