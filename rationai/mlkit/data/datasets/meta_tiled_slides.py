@@ -2,15 +2,15 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import TypeVar
 
-import pyarrow.compute as pc
+import numpy as np
+import pyarrow as pa
 from datasets import Dataset as HFDataset
 from datasets import concatenate_datasets, load_dataset
 from mlflow.artifacts import download_artifacts
 from torch.utils.data import ConcatDataset, Dataset
-import pyarrow as pa
-import numpy as np
+
 
 T = TypeVar("T", covariant=True)
 
@@ -63,9 +63,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         """Creates a fast lookup table for slide indices.
 
         This function builds a mapping from `slide_id` to the range of indices in the
-        `tiles` dataset that correspond to that slide. It assumes that the `tiles` dataset
-        is sorted by `slide_id`, which allows for efficient retrieval of tile indices
-        for each slide without needing to scan the entire dataset for each slide.
+        `tiles` dataset that correspond to that slide.
 
         Args:
             tiles: A dataset containing a `slide_id` column, sorted by `slide_id`.
@@ -86,8 +84,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
         # 3. Combine them into a lightweight PyArrow Table
         table = pa.Table.from_arrays(
-            [slide_ids, row_indices], 
-            names=["slide_id", "idx"]
+            [slide_ids, row_indices], names=["slide_id", "idx"]
         )
 
         # 4. Perform the native Arrow groupby and aggregate
@@ -147,7 +144,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             paths: List of directories to load slides and tiles from. Each
                 directory must include two files: `slides.parquet` and tiles.parquet`.
             uris: List of MLFlow artifact URIs pointing to folders containing
-                `slides.parquet` and `tiles.parquet`.
+                `slides.parquet` and `tiles.parquet` or chunks.
 
         Raises:
             FileNotFoundError: If the data cannot be loaded from the specified URIs.
@@ -163,26 +160,36 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
         search_dirs = [Path(p) for p in (*paths, *artifacts_paths)]
 
-        # Extract existing file paths
-        slide_files = [
-            str(s) for p in search_dirs if (s := p / "slides.parquet").exists()
-        ]
-        tile_files = [
-            str(t) for p in search_dirs if (t := p / "tiles.parquet").exists()
-        ]
+        def resolve_search_path(partition: str) -> list[dict[str, str]]:
+            return [
+                {"data_dir": str(path / partition)}
+                if (path / partition).is_dir()
+                else {"data_files": str(path / f"{partition}.parquet")}
+                for path in search_dirs
+            ]
 
-        # Handle empty datasets
-        if not (slide_files and tile_files):
-            return HFDataset.from_dict({}), HFDataset.from_dict({})
+        slide_files = MetaTiledSlides.resolve_search_path(search_dirs, "slides")
+        tile_files = MetaTiledSlides.resolve_search_path(search_dirs, "tiles")
 
         try:
             # Load datasets with memory mapping (lazy)
             loader_kwargs = {"path": "parquet", "split": "train"}
 
-            slides_ds = load_dataset(**loader_kwargs, data_files=slide_files)  # pyright: ignore[reportArgumentType, reportCallIssue]
-            tiles_ds = load_dataset(**loader_kwargs, data_files=tile_files)  # pyright: ignore[reportArgumentType, reportCallIssue]
+            slides_ds = concatenate_datasets(
+                [
+                    load_dataset(**loader_kwargs, **datasource)
+                    for datasource in slide_files
+                ]
+            )
 
-            return cast("HFDataset", slides_ds), cast("HFDataset", tiles_ds)
+            tiles_ds = concatenate_datasets(
+                [
+                    load_dataset(**loader_kwargs, **datasource)
+                    for datasource in tile_files
+                ]
+            )
+
+            return slides_ds, tiles_ds
 
         except Exception as e:
             msg = f"Failed to load Parquet files. Found {len(slide_files)} slides and {len(tile_files)} tiles."
