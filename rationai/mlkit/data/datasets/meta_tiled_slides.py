@@ -109,7 +109,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         grouped = table.group_by("slide_id").aggregate([("idx", "list")])
 
         # 6. Extract keys to Python, but KEEP values as PyArrow ListScalars
-        keys = grouped.column("slide_id").to_pylist()
+        keys = grouped.column("slide_id").to_numpy()
         values_array = grouped.column("idx_list")
 
         # Map the string key to the PyArrow ListScalar
