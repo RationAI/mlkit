@@ -43,14 +43,20 @@ class SlidesTilesLoader:
         if hf_kwargs is None:
             hf_kwargs = {"path": "parquet", "split": "train"}
 
-        slides, tiles = self.load_slides_and_tiles(paths or [], uris or [], hf_kwargs)
+        slides = []
+        tiles = []
+
+        if paths or uris:
+            s, t = self.load_slides_and_tiles(paths or [], uris or [], hf_kwargs)
+            slides.append(s)
+            tiles.append(t)
 
         if slides_and_tiles is not None:
-            slides = concatenate_datasets([slides, slides_and_tiles[0]])
-            tiles = concatenate_datasets([tiles, slides_and_tiles[1]])
+            slides.append(slides_and_tiles[0])
+            tiles.append(slides_and_tiles[1])
 
-        self.slides = slides
-        self.tiles = tiles
+        self.slides = concatenate_datasets(slides) if len(slides) > 1 else slides[0]
+        self.tiles = concatenate_datasets(tiles) if len(tiles) > 1 else tiles[0]
         self._slide_id_to_indices = self._build_tile_index(self.tiles)
 
     @staticmethod
