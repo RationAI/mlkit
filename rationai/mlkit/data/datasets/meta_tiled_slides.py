@@ -209,7 +209,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
         hf_kwargs: dict[str, Any] | None = None,
     ) -> None:
-        """Load slides and tiles from MLFlow artifacts.
+        """Load slides and tiles from local paths, MLFlow URIs, or preloaded datasets.
 
         Args:
             paths: List of directories to load slides and tiles from. Each
