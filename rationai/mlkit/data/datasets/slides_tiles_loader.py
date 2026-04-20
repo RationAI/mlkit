@@ -36,9 +36,10 @@ class SlidesTilesLoader:
             hf_kwargs: Additional keyword arguments to pass to HuggingFace's
                 `load_dataset` function. Defaults to `{"path": "parquet", "split": "train"}`.
         """
-        assert paths or uris or slides_and_tiles, (
-            "At least one of paths, uris or slides_and_tiles must be provided."
-        )
+        if not (paths or uris or slides_and_tiles):
+            raise ValueError(
+                "At least one of paths, uris or slides_and_tiles must be provided."
+            )
 
         if hf_kwargs is None:
             hf_kwargs = {"path": "parquet", "split": "train"}
