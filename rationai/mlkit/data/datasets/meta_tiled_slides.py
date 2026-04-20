@@ -15,16 +15,8 @@ from torch.utils.data import ConcatDataset, Dataset
 T = TypeVar("T", covariant=True)
 
 
-class MetaTiledSlides(ConcatDataset[T], ABC):
-    """Abstract base class for creating concatenated datasets from slides and tiles.
-
-    This class provides a factory method to load and concatenate datasets from different
-    sources: local storage, preloaded data, or artifacts stored in MLFlow.
-
-    Attributes:
-        slides (HFDataset): Dataset containing slide metadata.
-        tiles (HFDataset): Dataset containing tile metadata.
-    """
+class SlidesTilesLoader:
+    """Loads and concatenates slides/tiles metadata."""
 
     def __init__(
         self,
@@ -34,7 +26,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
         hf_kwargs: dict[str, Any] | None = None,
     ) -> None:
-        """Load slides and tiles from MLFlow artifacts.
+        """Load slides and tiles from local paths, MLFlow URIs, or preloaded datasets.
 
         Args:
             paths: List of directories to load slides and tiles from. Each
@@ -65,8 +57,6 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         self.slides = slides
         self.tiles = tiles
         self._slide_id_to_indices = self._build_tile_index(self.tiles)
-
-        super().__init__(self.generate_datasets())
 
     @staticmethod
     def _build_tile_index(tiles: HFDataset) -> dict[str | bytes, pa.ListScalar]:
@@ -114,25 +104,6 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
         # Map the string key to the PyArrow ListScalar
         return {key: values_array[i] for i, key in enumerate(keys)}
-
-    @abstractmethod
-    def generate_datasets(self) -> Iterable[Dataset[T]]:
-        """Factory method to generate datasets from slides and tiles.
-
-        Example:
-            ```python
-            return (
-                SlideTiles(
-                    slide_path=slide["path"],
-                    level=slide["level"],
-                    tile_extent_x=slide["tile_extent_x"],
-                    tile_extent_y=slide["tile_extent_y"],
-                    tiles=self.filter_tiles_by_slide(slide.id),
-                )
-                for slide in self.slides
-            )
-            ```
-        """
 
     def filter_tiles_by_slide(self, slide_id: str | bytes) -> HFDataset:
         """Returns a view of the dataset using a slice or indices.
@@ -217,3 +188,83 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         except Exception as e:
             msg = "Failed to load Parquet files."
             raise FileNotFoundError(msg) from e
+
+
+class MetaTiledSlides(ConcatDataset[T], ABC):
+    """Abstract base class for creating concatenated datasets from slides and tiles.
+
+    This class provides a factory method to load and concatenate datasets from different
+    sources: local storage, preloaded data, or artifacts stored in MLFlow.
+
+    Attributes:
+        slides (HFDataset): Dataset containing slide metadata.
+        tiles (HFDataset): Dataset containing tile metadata.
+    """
+
+    def __init__(
+        self,
+        *,
+        paths: Iterable[Path | str] | None = None,
+        uris: Iterable[str] | None = None,
+        slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
+        hf_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        """Load slides and tiles from MLFlow artifacts.
+
+        Args:
+            paths: List of directories to load slides and tiles from. Each
+                directory must include either single files (`slides.parquet`
+                and `tiles.parquet`) or subdirectories (`slides/` and `tiles/`)
+                containing chunked Parquet files.
+            uris: List of MLFlow artifact URIs pointing to folders containing
+                either single files (`slides.parquet` and `tiles.parquet`) or
+                subdirectories (`slides/` and `tiles/`) containing chunked
+                Parquet files.
+            slides_and_tiles: Tuple containing the slides and tiles Datasets.
+            hf_kwargs: Additional keyword arguments to pass to HuggingFace's
+                `load_dataset` function. Defaults to `{"path": "parquet", "split": "train"}`.
+        """
+        self._meta = SlidesTilesLoader(
+            paths=paths,
+            uris=uris,
+            slides_and_tiles=slides_and_tiles,
+            hf_kwargs=hf_kwargs,
+        )
+        self.slides = self._meta.slides
+        self.tiles = self._meta.tiles
+        super().__init__(self.generate_datasets())
+
+    def filter_tiles_by_slide(self, slide_id: str | bytes) -> HFDataset:
+        """Returns a view of the dataset using a slice or indices.
+
+        This function creates a view of the `self.tiles` dataset that contains only
+        the tiles belonging to the specified slide. It uses the precomputed
+        `_slide_id_to_indices` mapping to efficiently retrieve the relevant tiles
+        without copying data.
+
+        Args:
+            slide_id: The ID of the slide to filter tiles.
+
+        Returns:
+            A view of the tiles dataset containing only the tiles for the specified slide.
+        """
+        return self._meta.filter_tiles_by_slide(slide_id)
+
+    @abstractmethod
+    def generate_datasets(self) -> Iterable[Dataset[T]]:
+        """Factory method to generate datasets from slides and tiles.
+
+        Example:
+            ```python
+            return (
+                SlideTiles(
+                    slide_path=slide["path"],
+                    level=slide["level"],
+                    tile_extent_x=slide["tile_extent_x"],
+                    tile_extent_y=slide["tile_extent_y"],
+                    tiles=self.filter_tiles_by_slide(slide.id),
+                )
+                for slide in self.slides
+            )
+            ```
+        """
