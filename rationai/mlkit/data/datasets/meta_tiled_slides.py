@@ -143,7 +143,7 @@ class SlidesTilesLoader:
                 `load_dataset` function.
 
         Raises:
-            FileNotFoundError: If the data cannot be loaded from the specified URIs.
+            RuntimeError: If the data cannot be loaded from the specified URIs.
 
         Returns:
             A tuple containing the slides and tiles Datasets.
@@ -187,7 +187,7 @@ class SlidesTilesLoader:
 
         except Exception as e:
             msg = "Failed to load Parquet files."
-            raise FileNotFoundError(msg) from e
+            raise RuntimeError(msg) from e
 
 
 class MetaTiledSlides(ConcatDataset[T], ABC):
@@ -209,7 +209,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
         hf_kwargs: dict[str, Any] | None = None,
     ) -> None:
-        """Load slides and tiles from local paths, MLFlow URIs, or preloaded datasets.
+        """Load slides and tiles from MLFlow artifacts.
 
         Args:
             paths: List of directories to load slides and tiles from. Each
