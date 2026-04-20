@@ -84,7 +84,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
                     level=slide["level"],
                     tile_extent_x=slide["tile_extent_x"],
                     tile_extent_y=slide["tile_extent_y"],
-                    tiles=self.filter_tiles_by_slide(slide.id),
+                    tiles=self.filter_tiles_by_slide(slide["id"]),
                 )
                 for slide in self.slides
             )
