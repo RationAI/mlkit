@@ -60,7 +60,7 @@ class ParquetDataset(Dataset):
         """Create config dictionary for the dataset."""
         config = super().to_dict()
         config.update({
-            "schema": json.dumps(self.schema.to_dict()),
+            "schema": json.dumps({"mlflow_colspec": self.schema.to_dict()}),
             "profile": json.dumps(self.profile),
         })
         return config
@@ -82,9 +82,27 @@ class ParquetDataset(Dataset):
 
     @property
     def profile(self) -> Any:
-        """A lightweight profile of the dataset metadata."""
+        """A profile of the dataset metadata.
+
+        Reads Parquet footers to instantly get row counts and structural metadata 
+        without loading the actual data blocks into memory.
+        """
+        total_rows = 0
+        
+        # Iterate over file fragments to read metadata directly from Parquet footers
+        for fragment in self._ds.get_fragments():
+            # ParquetFileFragment natively exposes 'metadata'
+            if hasattr(fragment, "metadata") and fragment.metadata is not None:
+                chunk_rows = fragment.metadata.num_rows
+            else:
+                chunk_rows = fragment.count_rows()
+                
+            total_rows += chunk_rows
+
         return {
             "num_files": len(self._ds.files),
+            "total_rows": total_rows,
+            "num_columns": len(self._ds.schema.names),
             "backend_format": "parquet",
         }
 
@@ -150,5 +168,3 @@ def from_parquet(
         name=name, 
         digest=digest
     )
-
-
