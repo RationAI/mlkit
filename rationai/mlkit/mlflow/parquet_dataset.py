@@ -25,7 +25,7 @@ class ParquetDataset(Dataset):
         name: str | None = None,
         digest: str | None = None,
     ):
-        """Hety.
+        """Initializes the ParquetDataset.
 
         Args:
             path: Local path or URI to the Parquet file or directory.
