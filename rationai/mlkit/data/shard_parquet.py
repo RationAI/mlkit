@@ -31,7 +31,6 @@ def shard_parquet(
         AssertionError: If `rows_per_shard` or `row_group_size` are not strictly positive,
             or if `rows_per_shard` is not perfectly divisible by `row_group_size`.
     """
-    # --- Input Validation ---
     assert rows_per_shard > 0, "rows_per_shard must be greater than 0"
     assert row_group_size > 0, "row_group_size must be greater than 0"
 
@@ -40,31 +39,25 @@ def shard_parquet(
         "rows_per_shard must be divisible by row_group_size"
     )
 
-    # --- Setup Output Directory ---
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Read and Shard Process ---
     with pq.ParquetFile(input_file) as parquet_file:
         _logger.info(f"Total rows in source: {parquet_file.metadata.num_rows}")
 
-        # Initialize tracking variables
         shard_idx = 0
         current_shard_rows = 0
         writer = None
 
         try:
-            # Iterate through the source file in memory-efficient chunks (batches)
             for batch in parquet_file.iter_batches(batch_size=row_group_size):
                 if writer is None:
                     out_path = output_dir / f"shard_{shard_idx:05d}.parquet"
                     writer = pq.ParquetWriter(out_path, batch.schema)
 
-                # Write the current batch
                 writer.write_batch(batch)
                 current_shard_rows += batch.num_rows
 
-                # Check if the current shard has reached its maximum capacity
                 if current_shard_rows >= rows_per_shard:
                     writer.close()
                     writer = None

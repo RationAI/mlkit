@@ -42,6 +42,10 @@ class MaxAggregator(Aggregator):
 class MeanAggregator(Aggregator):
     """Aggregator to compute the mean of predictions and targets."""
 
+    preds: Tensor
+    targets: Tensor
+    count: Tensor
+
     def __init__(self) -> None:
         super().__init__()
         self.add_state("preds", default=torch.tensor(0.0), dist_reduce_fx="sum")
@@ -58,17 +62,17 @@ class MeanAggregator(Aggregator):
 
 
 class HeatmapAggregator(Aggregator):
-    preds: list[Tensor]
-    targets: list[Tensor]
-    xs: list[Tensor]
-    ys: list[Tensor]
-
     """Abstract aggregator covering the prediction heatmap generation.
 
     Arguments:
         extent_tile (int): Size of the tile.
         stride_tile (int): Tile stride.
     """
+
+    preds: list[Tensor]
+    targets: list[Tensor]
+    xs: list[Tensor]
+    ys: list[Tensor]
 
     def __init__(
         self,

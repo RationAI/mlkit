@@ -35,21 +35,13 @@ def with_cli_args(
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # 1. Save original state
             original_argv = sys.argv[:]
-
-            # 2. Deconstruct existing argv
-            # sys.argv[0] is the script name
-            script_name = [sys.argv[0]]
-            user_provided_args = sys.argv[1:]
-
-            # 3. Reconstruct: [Script] + [Start] + [User] + [End]
+            script_name, user_provided_args = sys.argv[:1], sys.argv[1:]
             sys.argv = script_name + prepend + user_provided_args + append
 
             try:
                 return func(*args, **kwargs)
             finally:
-                # 4. Restore original state guarantees safety
                 sys.argv = original_argv
 
         return wrapper

@@ -1,6 +1,6 @@
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 from torch import Tensor
 from torchmetrics import Metric, MetricCollection
@@ -79,11 +79,19 @@ class AggregatedMetricCollection(MetricCollection):
         aggregator: Aggregator,
         prefix: str | None = None,
     ) -> None:
-        super().__init__(metrics, prefix=prefix)
+        super().__init__(
+            cast(
+                "Metric | MetricCollection | Sequence[Metric | MetricCollection] | dict[str, Metric | MetricCollection]",
+                metrics,
+            ),
+            prefix=prefix,
+        )
 
-        self.aggregators: dict[str, Aggregator] = defaultdict(aggregator.clone)
+        self.aggregators: dict[str, Aggregator] = defaultdict(
+            cast("Callable[[], Aggregator]", aggregator.clone)
+        )
 
-    def update(  # pylint: disable=arguments-differ
+    def update(  # type: ignore[override]
         self, preds: Tensor, targets: Tensor, keys: list[str], **kwargs: Any
     ) -> None:
         kwargs_t = ({k: v[i] for k, v in kwargs.items()} for i in range(len(preds)))

@@ -35,7 +35,7 @@ class NestedMetricCollection(MetricCollection):
         >>> # Create the NestedMetricCollection, setting 'slide' as the unique identifier for grouping. The class names are provided for multi-class metrics.
         >>> nested_metrics = NestedMetricCollection(
         ...     metrics,
-        ...     key_name="slide"
+        ...     key_name="slide",
         ...     class_names=["A", "B", "C"],
         ... )
 
@@ -84,7 +84,7 @@ class NestedMetricCollection(MetricCollection):
         self.class_names = class_names
         self.sep = sep
 
-    def update(  # pylint: disable=arguments-differ
+    def update(  # type: ignore[override]
         self, preds: Tensor, targets: Tensor, keys: list[str]
     ) -> None:
         for pred, target, key in zip(preds, targets, keys, strict=True):
@@ -101,7 +101,7 @@ class NestedMetricCollection(MetricCollection):
                 self[new_name].update(pred.unsqueeze(0), target.unsqueeze(0))
 
     def compute(self) -> dict[str, Any]:
-        divided_metrics = defaultdict(dict)
+        divided_metrics: defaultdict[str, dict[str, Any]] = defaultdict(dict)
         for name, value in super().compute().items():
             key, subkey = name.split(self.sep, maxsplit=1)
 
@@ -112,7 +112,7 @@ class NestedMetricCollection(MetricCollection):
                 # handle multi-class metrics without averaging
                 assert len(value.shape) == 1
                 if self.class_names is None:
-                    self.class_names = list(range(len(value)))
+                    self.class_names = [str(i) for i in range(len(value))]
 
                 if len(value) != len(self.class_names):
                     raise ValueError(

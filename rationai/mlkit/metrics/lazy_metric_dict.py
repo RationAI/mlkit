@@ -1,7 +1,7 @@
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
-from deprecated import deprecated
+from deprecated import deprecated  # type: ignore[import-untyped]
 from torch.nn import ModuleDict
 from torchmetrics import Metric, MetricCollection
 
@@ -19,11 +19,15 @@ class LazyMetricDict(ModuleDict):
         if key not in self:
             self.add_module(key, deepcopy(self.metric))
 
-        self[key].update(*args, **kwargs)
+        cast("Metric | MetricCollection", self[key]).update(*args, **kwargs)
 
     def compute(self) -> dict[str, Any]:
-        return {k: v.compute() for k, v in self.items() if k != "metric"}
+        return {
+            k: cast("Metric | MetricCollection", v).compute()
+            for k, v in self.items()
+            if k != "metric"
+        }
 
     def reset(self) -> None:
         for metric in self.values():
-            metric.reset()
+            cast("Metric | MetricCollection", metric).reset()

@@ -67,9 +67,9 @@ class StratifiedBatchSampler(BatchSampler):
                 if not len(indices[group_idx]):
                     indices.pop(group_idx)
 
-            batch_indices = list(batch_indices)
-            random.shuffle(batch_indices)
-            yield batch_indices
+            batch_list = list(batch_indices)
+            random.shuffle(batch_list)
+            yield batch_list
 
     def __len__(self) -> int:
         return self._indices_size(self.data_indices).sum() // self.batch_size
@@ -89,14 +89,12 @@ class PDMStratifiedBatchSampler(StratifiedBatchSampler):
 
     This sampler is designed to create balanced batches from a DataFrame by
     stratifying samples based on a specified column.
-
-
     """
 
     def __init__(
         self,
         data: pd.DataFrame,
-        stratify_by: None,
+        stratify_by: str | list[str],
         batch_size: int,
         **kwargs: dict[str, Any],
     ) -> None:

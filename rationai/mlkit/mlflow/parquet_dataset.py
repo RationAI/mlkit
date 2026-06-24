@@ -82,24 +82,17 @@ class ParquetDataset(Dataset):
         """The name of the target column, if specified."""
         return self._target_col
 
-    @property
+    @cached_property
     def profile(self) -> Any:
         """A profile of the dataset metadata.
 
         Reads Parquet footers to instantly get row counts and structural metadata
         without loading the actual data blocks into memory.
         """
-        total_rows = 0
-
-        # Iterate over file fragments to read metadata directly from Parquet footers
-        for fragment in self._ds.get_fragments():
-            # ParquetFileFragment natively exposes 'metadata'
-            if hasattr(fragment, "metadata") and fragment.metadata is not None:
-                chunk_rows = fragment.metadata.num_rows
-            else:
-                chunk_rows = fragment.count_rows()
-
-            total_rows += chunk_rows
+        # count_rows() sums footer row counts (falling back to a scan only when
+        # metadata is unavailable) using pyarrow's multi-threaded C++ implementation,
+        # which is much faster than a Python-level fragment loop for many shards.
+        total_rows = self._ds.count_rows()
 
         return {
             "num_files": len(self._ds.files),

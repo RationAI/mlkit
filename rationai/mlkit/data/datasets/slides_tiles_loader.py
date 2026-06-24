@@ -76,35 +76,28 @@ class SlidesTilesLoader:
         if len(tiles) == 0:
             return {}
 
-        # 1. Grab the column directly from the underlying PyArrow Table
         slide_ids = tiles.data.column("slide_id")
         num_rows = len(slide_ids)
 
-        # 2. Handle the "Large" type conversion
+        # group_by requires the "large" variants for string/binary columns
         current_type = slide_ids.type
         if pa.types.is_string(current_type):
             slide_ids = slide_ids.cast(pa.large_string())
         elif pa.types.is_binary(current_type):
             slide_ids = slide_ids.cast(pa.large_binary())
 
-        # 3. Generate sequential row indices
-        # np.arange is used here because PyArrow can wrap it instantly with zero-copy overhead
+        # np.arange is used here because PyArrow can wrap it with zero-copy overhead
         row_indices = pa.array(np.arange(num_rows, dtype=np.int64))
-
-        # 4. Combine them into a lightweight PyArrow Table
         table = pa.Table.from_arrays(
             [slide_ids, row_indices], names=["slide_id", "idx"]
         )
 
-        # 5. Perform the native Arrow groupby and aggregate
-        # The "list" function aggregates all indices for a given slide_id into a single Arrow List scalar
+        # "list" aggregates all indices for a given slide_id into a single Arrow List scalar
         grouped = table.group_by("slide_id").aggregate([("idx", "list")])
 
-        # 6. Extract keys to Python, but KEEP values as PyArrow ListScalars
+        # Keep values as PyArrow ListScalars to avoid materializing them in Python
         keys = grouped.column("slide_id").to_numpy()
         values_array = grouped.column("idx_list")
-
-        # Map the string key to the PyArrow ListScalar
         return {key: values_array[i] for i, key in enumerate(keys)}
 
     def filter_tiles_by_slide(self, slide_id: str | bytes) -> HFDataset:
