@@ -45,7 +45,7 @@ class ParquetDataset(Dataset):
 
     def _compute_digest(self) -> str:
         """Computes a fast digest for the dataset based on schema and file paths."""
-        hasher = hashlib.md5()
+        hasher = hashlib.md5(usedforsecurity=False)
 
         # Hash the schema structure
         hasher.update(str(self._ds.schema).encode("utf-8"))
