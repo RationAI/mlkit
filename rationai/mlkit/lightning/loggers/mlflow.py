@@ -150,9 +150,8 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
                 self.run_id, tmpdir, f"{MLFLOW_CHECKPOINT_PATH}/{key}"
             )
 
-    # Ensures that MLFlow logged checkpoints are in sync with those saved by the trainer.
     def _scan_and_log_checkpoints(self, checkpoint_callback: ModelCheckpoint) -> None:
-        """Scan checkpoints and log them to MLFlow if not already logged."""
+        """Scan checkpoints and log them to MLFlow, keeping them in sync with the trainer."""
         checkpoints = self._scan_checkpoints(checkpoint_callback)
 
         logged_checkpoints = {
