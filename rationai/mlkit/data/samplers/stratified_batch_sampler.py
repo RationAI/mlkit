@@ -96,7 +96,7 @@ class PDMStratifiedBatchSampler(StratifiedBatchSampler):
         data: pd.DataFrame,
         stratify_by: str | list[str],
         batch_size: int,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """Initializes the PDMStratifiedBatchSampler with DataFrame and batch size.
 

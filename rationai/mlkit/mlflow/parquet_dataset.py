@@ -4,6 +4,7 @@ import logging
 from functools import cached_property
 from typing import Any
 
+import pyarrow as pa
 import pyarrow.dataset as ds
 from mlflow.data.dataset import Dataset
 from mlflow.data.dataset_source import DatasetSource
@@ -105,9 +106,8 @@ class ParquetDataset(Dataset):
     def schema(self) -> Schema:
         """MLflow Schema representing the dataset features."""
         try:
-            # Fetch an empty Pandas dataframe from the schema to utilize MLflow's built-in
-            # inference securely and correctly map PyArrow types to MLflow types.
-            empty_df = self._ds.head(0).to_pandas()
+            # Create an empty PyArrow Table from the schema and convert to Pandas.
+            empty_df = pa.Table.from_batches([], schema=self._ds.schema).to_pandas()
             inferred_schema = _infer_schema(empty_df)
             return inferred_schema
         except Exception as e:
