@@ -76,9 +76,8 @@ class SlidesTilesLoader:
         if len(tiles) == 0:
             return {}
 
-        # 1. Read slide_id through HFDataset's logical interface so that any
-        #    prior .filter() / .select() on the dataset is respected.
-        slide_ids = pa.array(tiles["slide_id"])
+        # 1. Read slide_id as Arrow data, respecting any prior .filter() / .select().
+        slide_ids = tiles.with_format("arrow")["slide_id"]
         num_rows = len(tiles)
 
         # 2. Handle the "Large" type conversion
