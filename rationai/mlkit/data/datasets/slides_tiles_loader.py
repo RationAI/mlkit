@@ -76,9 +76,12 @@ class SlidesTilesLoader:
         if len(tiles) == 0:
             return {}
 
-        # 1. Grab the column directly from the underlying PyArrow Table
-        slide_ids = tiles.data.column("slide_id")
-        num_rows = len(slide_ids)
+        # 1. Read slide_id through HFDataset's logical interface so that any
+        #    prior .filter() / .select() on the dataset is respected.
+        #    Accessing tiles.data.column() directly bypasses the _indices
+        #    mapping and returns physical-table rows, causing stale offsets.
+        slide_ids = pa.array(tiles["slide_id"])
+        num_rows = len(tiles)
 
         # 2. Handle the "Large" type conversion
         current_type = slide_ids.type
@@ -87,8 +90,7 @@ class SlidesTilesLoader:
         elif pa.types.is_binary(current_type):
             slide_ids = slide_ids.cast(pa.large_binary())
 
-        # 3. Generate sequential row indices
-        # np.arange is used here because PyArrow can wrap it instantly with zero-copy overhead
+        # 3. Generate sequential logical row indices
         row_indices = pa.array(np.arange(num_rows, dtype=np.int64))
 
         # 4. Combine them into a lightweight PyArrow Table
