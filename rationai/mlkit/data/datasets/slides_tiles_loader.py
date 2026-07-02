@@ -76,9 +76,9 @@ class SlidesTilesLoader:
         if len(tiles) == 0:
             return {}
 
-        # 1. Grab the column directly from the underlying PyArrow Table
-        slide_ids = tiles.data.column("slide_id")
-        num_rows = len(slide_ids)
+        # 1. Read slide_id as Arrow data, respecting any prior .filter() / .select().
+        slide_ids = tiles.with_format("arrow")["slide_id"]
+        num_rows = len(tiles)
 
         # 2. Handle the "Large" type conversion
         current_type = slide_ids.type
