@@ -1,0 +1,1 @@
+# rationai.mlkit.data namespace
