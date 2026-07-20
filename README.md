@@ -1,4 +1,4 @@
-# rationai.mlflow — Unified ML Provenance & Metrics Toolkit
+# rationai.mlkit — Unified ML Provenance & Metrics Toolkit
 
 Automatic PROV-O-aware experiment tracking for pathology image classification,
 with Lightning/Hydra integration and pathology-specific metric layers.
@@ -14,7 +14,7 @@ optimizer/scheduler settings, console output) is captured automatically via the
 ```bash
 uv venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync
 ```
 
 Start the MLflow server:
@@ -35,9 +35,6 @@ The easiest way to see everything in action:
 # Full pipeline — uploads to localhost:5000
 python demo.py
 
-# With dummy datasets
-python demo.py --datasets 3
-
 # Push to a different MLflow server
 python demo.py --uri http://your-server:5000
 
@@ -49,7 +46,7 @@ The demo exercises all components:
 
 | Step | Feature | What it shows |
 |---|---|---|
-| 1 | Dummy data creation | `data/dummy_dataset_*` with manifests |
+| 1 | Dummy data creation | `test_data/dummy_dataset_*` with manifests |
 | 2 | **StreamCapture** | ANSI-aware stdout/stderr capture |
 | 3 | **AggregatedMetricCollection** | Tile → slide metric aggregation |
 | 4 | **NestedMetricCollection** | Per-slide multiclass metrics |
@@ -113,24 +110,15 @@ python user_to_mlflow.py
 
 This creates a run in the **User_Registry** experiment with your identity tags.
 
-### 4. Register a dataset
+### 4. Run a training experiment
 
-Edit the path/name variables in `dataset_to_mlflow.py` and run:
-
-```bash
-python dataset_to_mlflow.py
-```
-
-This logs the manifest (enriched with file sizes & timestamps) as an MLflow
-artifact under the **Dataset_Registry** experiment.
-
-### 5. Run a training experiment
-
-Edit `experiment.py` to define your model and training loop, then:
+Use the `@autolog` decorator from `rationai.mlkit.provenance` in your training script, then:
 
 ```bash
-python experiment.py
+python your_experiment.py
 ```
+
+See the [API reference](#provenance--autolog-decorator) below for details.
 
 ---
 
@@ -141,7 +129,7 @@ python experiment.py
 Full auto-capture for plain PyTorch training runs:
 
 ```python
-from rationai.mlflow.provenance import autolog
+from rationai.mlkit.provenance import autolog
 
 @autolog(model_name="my_model_v1", experiment_name="My_Experiment")
 def train(run):
@@ -185,8 +173,8 @@ Wrap Lightning training in `@autolog` and pass the active run to `MLFlowLogger`:
 
 ```python
 import mlflow
-from rationai.mlflow import Trainer, MLFlowLogger
-from rationai.mlflow.provenance import autolog
+from rationai.mlkit import Trainer, MLFlowLogger
+from rationai.mlkit.provenance import autolog
 
 @autolog(model_name="my_lightning_model", experiment_name="My_Experiment")
 def train(run):
@@ -215,7 +203,7 @@ Group tile-level predictions by slide and compute metrics at the slide level:
 
 ```python
 from torchmetrics import Accuracy
-from rationai.mlflow import (
+from rationai.mlkit import (
     AggregatedMetricCollection,
     MaxAggregator,
     MeanAggregator,
@@ -240,7 +228,7 @@ Available aggregators: `MaxAggregator`, `MeanAggregator`, `TopKAggregator`, `Mea
 Compute multiple torchmetrics per slide with class-level breakdowns:
 
 ```python
-from rationai.mlflow import NestedMetricCollection
+from rationai.mlkit import NestedMetricCollection
 from torchmetrics import Accuracy, Precision
 
 metrics = NestedMetricCollection(
@@ -262,7 +250,7 @@ Captures console output (including progress bars and ANSI color codes)
 without corrupting the log:
 
 ```python
-from rationai.mlflow import StreamCapture
+from rationai.mlkit import StreamCapture
 
 with StreamCapture(stream="stdout") as capture:
     print("Hello!")
@@ -279,7 +267,7 @@ clean = capture.get_clean_text() # ANSI codes stripped
 Balanced class sampling across batches:
 
 ```python
-from rationai.mlflow import StratifiedBatchSampler
+from rationai.mlkit import StratifiedBatchSampler
 
 sampler = StratifiedBatchSampler(
     data_indices=[[0, 1, 2, 3], [4, 5, 6, 7]],  # per-class indices
@@ -294,7 +282,7 @@ for batch in sampler:
 Load tile data from parquet or MLflow artifact URIs:
 
 ```python
-from rationai.mlflow import MetaTiledSlides
+from rationai.mlkit import MetaTiledSlides
 
 dataset = MetaTiledSlides(
     manifest_uri="s3://bucket/data/manifest.parquet",
@@ -306,11 +294,11 @@ dataset = MetaTiledSlides(
 
 | Component | Import | Purpose |
 |---|---|---|
-| `Trainer` | `from rationai.mlflow import Trainer` | Lightning Trainer with MLflow checkpoint sync |
-| `MLFlowLogger` | `from rationai.mlflow import MLFlowLogger` | Logger with git tags, stream capture, checkpoint sync |
-| `MultiloaderLifecycle` | `from rationai.mlflow import MultiloaderLifecycle` | Per-dataloader callback hooks |
-| `lightning_autolog` | `from rationai.mlflow.lightning import autolog` | Lightning-specific autolog decorator |
-| `with_cli_args` | `from rationai.mlflow.lightning import with_cli_args` | Programmatic config injection (Hydra) |
+| `Trainer` | `from rationai.mlkit import Trainer` | Lightning Trainer with MLflow checkpoint sync |
+| `MLFlowLogger` | `from rationai.mlkit import MLFlowLogger` | Logger with git tags, stream capture, checkpoint sync |
+| `MultiloaderLifecycle` | `from rationai.mlkit import MultiloaderLifecycle` | Per-dataloader callback hooks |
+| `lightning_autolog` | `from rationai.mlkit.lightning import autolog` | Lightning-specific autolog decorator |
+| `with_cli_args` | `from rationai.mlkit.lightning import with_cli_args` | Programmatic config injection (Hydra) |
 
 ---
 
@@ -319,23 +307,21 @@ dataset = MetaTiledSlides(
 ```
 .
 ├── demo.py                      # End-to-end demo (all components)
-├── experiment.py                # User training script (@autolog decorated)
 ├── dummy_dataset_create.py      # Dummy data generator (CLI)
-├── dataset_to_mlflow.py         # Dataset registration script
 ├── user_to_mlflow.py            # User registration script
-├── requirements.txt             # Python dependencies
 ├── pyproject.toml               # Project metadata + deps
 ├── tests/
 │   └── test_all.py              # Unit test suite
-├── data/                        # Dummy datasets (gitignored)
+├── test_data/                   # Dummy datasets (gitignored)
 │   ├── dummy_dataset_1/
 │   │   ├── manifest.csv
 │   │   └── wsis/
 │   └── ...
 └── rationai/
-    └── mlflow/
+    └── mlkit/
         ├── __init__.py          # Package exports (lazy Lightning import)
-        ├── provenance.py        # @autolog decorator + PROV-O engine
+        ├── autolog.py           # Re-exports lightning.autolog
+        ├── with_cli_args.py     # Re-exports lightning.with_cli_args
         ├── stream/              # ANSI-aware console capture
         │   ├── stream_capture.py
         │   ├── stream_logger.py
@@ -349,7 +335,8 @@ dataset = MetaTiledSlides(
         │   ├── samplers/
         │   │   └── stratified_batch_sampler.py
         │   └── datasets/
-        │       └── meta_tiled_slides.py
+        │       ├── meta_tiled_slides.py
+        │       └── openslide_tiles_dataset.py
         └── lightning/           # Lightning + Hydra integration
             ├── autolog.py
             ├── trainer.py
