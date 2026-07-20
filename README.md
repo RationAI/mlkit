@@ -32,7 +32,7 @@ mlflow ui --host 0.0.0.0 --port 5000    # → http://localhost:5000
 The easiest way to see everything in action:
 
 ```bash
-# Full pipeline — uploads to localhost:5000
+# Full pipeline — uploads to http://localhost:5000
 python demo.py
 
 # Push to a different MLflow server

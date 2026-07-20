@@ -294,8 +294,8 @@ def step_lightning():
 
     import torch
     import lightning as pl
-    import mlflow
     from rationai.mlkit import Trainer, MLFlowLogger, MultiloaderLifecycle
+    from rationai.mlkit.provenance import autolog
 
     class _TinyModel(pl.LightningModule):
         def __init__(self):
@@ -311,14 +311,15 @@ def step_lightning():
         def configure_optimizers(self):
             return torch.optim.Adam(self.parameters(), lr=0.01)
 
-    mlflow.set_experiment("Demo_Lightning")
-    run = mlflow.start_run(run_name="Training_demo_lightning_model")
-
-    try:
+    @autolog(model_name="demo_lightning_model", experiment_name="Demo_Lightning", fail_fast=False)
+    def train(run):
         model = _TinyModel()
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+        run.register_model(model)
 
-        logger = MLFlowLogger(run_id=run.info.run_id)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+        run.register_optimizer(optimizer)
+
+        logger = MLFlowLogger(run_id=run._run_id)
         trainer = Trainer(
             logger=logger,
             max_epochs=2,
@@ -332,9 +333,9 @@ def step_lightning():
         trainer.fit(model, torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(torch.randn(16, 8), torch.randint(0, 2, (16,)))
         ))
-        print("  ✅ Training complete — check MLflow for logs")
-    finally:
-        mlflow.end_run()
+        run.save_model(model)
+
+    train()
 
 
 # ──────────────────────────────────────────────
@@ -413,11 +414,11 @@ def main():
     parser = argparse.ArgumentParser(description="rationai.mlkit — full pipeline demo")
     parser.add_argument("--test", action="store_true", help="Run unit tests instead")
     parser.add_argument("--uri", type=str, default=None,
-                        help="MLflow tracking URI (default: local file store)")
+                        help="MLflow tracking URI (default: http://localhost:5000)")
     args = parser.parse_args()
 
     import mlflow as _mlf
-    uri = args.uri or f"file:///tmp/mlkit_demo_mlruns_{os.getpid()}"
+    uri = args.uri or "http://localhost:5000"
     _mlf.set_tracking_uri(uri)
     print(f"[*] MLflow tracking URI: {uri}")
 
