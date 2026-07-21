@@ -97,10 +97,3 @@ def _log_config(config: DictConfig, logger: MLFlowLogger) -> None:
             OmegaConf.save(config, file, resolve=True)
 
         logger.log_artifacts(tmp_dir_str, "configs")
-
-
-def __getattr__(name: str):
-    if name == "autolog_provenance":
-        from rationai.mlkit.provenance.provenance import autolog as _autolog
-        return _autolog
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

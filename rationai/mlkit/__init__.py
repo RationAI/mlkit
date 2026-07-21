@@ -1,7 +1,6 @@
 """rationai.mlkit — ML toolkit with provenance tracking."""
 
 from rationai.mlkit.stream import StreamCapture, StreamLogger
-from rationai.mlkit.provenance.provenance import autolog as provenance_autolog
 from rationai.mlkit.provenance.register_dataset import register_dataset
 
 __all__ = [
@@ -22,9 +21,9 @@ __all__ = [
     "Trainer",
     "MLFlowLogger",
     "MultiloaderLifecycle",
+    "ProvenanceCallback",
     "autolog",
     "with_cli_args",
-    "provenance_autolog",
     "register_dataset",
 ]
 
@@ -34,6 +33,10 @@ def __getattr__(name):
         import importlib
         _mod = importlib.import_module("rationai.mlkit.lightning")
         return getattr(_mod, name)
+
+    if name == "ProvenanceCallback":
+        from rationai.mlkit.lightning.callbacks import ProvenanceCallback
+        return ProvenanceCallback
 
     if name in ("AggregatedMetricCollection", "Aggregator",
                 "MaxAggregator", "MeanAggregator", "MeanPoolMaxAggregator",

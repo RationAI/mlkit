@@ -39,6 +39,56 @@ def _lookup_dataset_run(manifest_path: str | None = None) -> str | None:
     return runs_df.iloc[0]["run_id"]
 
 
+def _detect_manifest() -> tuple[str | None, str | None]:
+    """Walk data/ looking for manifest.csv.
+
+    Returns (manifest_path, data_root) or (None, None).
+    """
+    for root_dir in ("data", "test_data", "."):
+        for dirpath, _, filenames in os.walk(root_dir):
+            if "manifest.csv" in filenames:
+                return (
+                    os.path.join(dirpath, "manifest.csv"),
+                    os.path.dirname(os.path.abspath(
+                        os.path.join(dirpath, "manifest.csv")
+                    )),
+                )
+    return None, None
+
+
+def verify_dataset(
+    manifest_path: str | None = None,
+    data_root: str | None = None,
+) -> dict:
+    """Public entry point — verify the current dataset against MLflow.
+
+    Auto-detects the manifest if *manifest_path* is not given.
+
+    Returns a dict with keys::
+
+        {"verified": bool, "file_sizes_match": bool|None,
+         "files_missing": int, "files_total": int, "details": list[str]}
+    """
+    if manifest_path is None:
+        manifest_path, data_root = _detect_manifest()
+
+    if manifest_path is None:
+        return {
+            "verified": False,
+            "dataset_run_id": None,
+            "file_sizes_match": None,
+            "files_missing": 0,
+            "files_total": 0,
+            "details": ["No manifest.csv found — skipping verification"],
+        }
+
+    if data_root is None:
+        data_root = os.path.dirname(os.path.abspath(manifest_path))
+
+    dataset_run_id = _lookup_dataset_run()
+    return _verify_dataset(manifest_path, data_root, dataset_run_id)
+
+
 def _verify_dataset(
     manifest_path: str,
     data_root: str,
