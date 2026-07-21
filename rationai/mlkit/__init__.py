@@ -1,15 +1,12 @@
 """rationai.mlkit — ML toolkit with provenance tracking."""
 
-from rationai.mlkit.stream import StreamCapture, StreamLogger, StreamModifier
-from rationai.mlkit.provenance.provenance import (
-    autolog as provenance_autolog,
-    register_dataset,
-)
+from rationai.mlkit.stream import StreamCapture, StreamLogger
+from rationai.mlkit.provenance.provenance import autolog as provenance_autolog
+from rationai.mlkit.provenance.register_dataset import register_dataset
 
 __all__ = [
     "StreamCapture",
     "StreamLogger",
-    "StreamModifier",
     "AggregatedMetricCollection",
     "Aggregator",
     "MaxAggregator",

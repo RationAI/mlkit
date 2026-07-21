@@ -96,9 +96,12 @@ def _get_git_info():
     return commit, remote, branch
 
 
-def _lookup_experiment(name):
-    exp = mlflow.get_experiment_by_name(name)
-    return exp.experiment_id if exp else None
+# ── Dataset helpers live in register_dataset.py ──────────────────────
+from .register_dataset import (  # noqa: F401
+    _lookup_dataset_run,
+    _lookup_experiment,
+    _verify_dataset,
+)
 
 
 def _lookup_user_run():
@@ -131,253 +134,7 @@ def _lookup_user_run():
     return row.run_id, dict(run.data.tags)
 
 
-def _lookup_dataset_run(manifest_path: str | None = None):
-    """Return the Dataset_Registry run that matches the detected manifest.
-
-    If *manifest_path* is given, looks for a registration run whose
-    ``manifest_hash`` tag matches the SHA-256 of that file.  Falls back
-    to the latest Dataset_Registry run if no match is found (so that
-    runs with only one registered dataset still work).
-    """
-    exp_id = _lookup_experiment("Dataset_Registry")
-    if exp_id is None:
-        return None
-
-    runs_df = mlflow.search_runs(
-        experiment_ids=[exp_id],
-        order_by=["start_time DESC"],
-    )
-    if runs_df.empty:
-        return None
-
-    # If we have a manifest, try to match by hash first
-    if manifest_path and os.path.isfile(manifest_path):
-        current_hash = _hash_manifest(manifest_path)
-        for _, row in runs_df.iterrows():
-            reg_hash = row.get("tags.manifest_hash", "")
-            if reg_hash == current_hash:
-                return row["run_id"]
-
-    # Fallback: latest run (backward compat when only one dataset registered)
-    return runs_df.iloc[0]["run_id"]
-
-
-def _hash_manifest(manifest_path: str) -> str:
-    """Compute SHA-256 hash of a manifest CSV file."""
-    h = hashlib.sha256()
-    with open(manifest_path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _hash_samples(samples: list[dict]) -> str:
-    """Compute a deterministic hash over the set of samples (path+label pairs).
-
-    Order-independent: sorts by path before hashing so that any reordering
-    of the manifest doesn't change the fingerprint.
-    """
-    h = hashlib.sha256()
-    for s in sorted(samples, key=lambda x: x["path"]):
-        h.update(f"{s['path']}:{s['label']}\n".encode())
-    return h.hexdigest()
-
-
-def register_dataset(
-    dataset_dir: str,
-    dataset_name: str | None = None,
-    version: str = "1.0.0",
-    experiment_name: str = "Dataset_Registry",
-):
-    """Register a dataset in MLflow's Dataset_Registry experiment.
-
-    Computes a SHA-256 hash of the manifest and stores it as a tag so that
-    future training runs can verify they're using the exact same data.
-
-    Args:
-        dataset_dir: Path to the dataset root (must contain manifest.csv).
-        dataset_name: Human-readable name (defaults to directory basename).
-        version: Dataset version string.
-        experiment_name: MLflow experiment for registration.
-
-    Returns:
-        The run_id of the registration run.
-
-    Example:
-        from rationai.mlflow.provenance import register_dataset
-
-        run_id = register_dataset("data/pato_cohort_01", version="2.0")
-        print(f"Registered as {run_id}")
-    """
-    dataset_dir = os.path.abspath(dataset_dir)
-    manifest_path = os.path.join(dataset_dir, "manifest.csv")
-    if not os.path.isfile(manifest_path):
-        raise FileNotFoundError(
-            f"No manifest.csv found in {dataset_dir}. "
-            "Dataset registration requires a manifest.csv file."
-        )
-
-    if dataset_name is None:
-        dataset_name = os.path.basename(dataset_dir)
-
-    # Compute hashes
-    manifest_hash = _hash_manifest(manifest_path)
-
-    # Read manifest and compute sample-level hash
-    df = pd.read_csv(manifest_path)
-    samples = []
-    for _, row in df.iterrows():
-        rel = row["wsi_path"]
-        full = os.path.join(dataset_dir, rel) if not os.path.isabs(rel) else rel
-        samples.append({"path": full, "label": int(row["cancer"])})
-    samples_hash = _hash_samples(samples)
-
-    # File-level hashes for each WSI
-    file_hashes = {}
-    for s in samples:
-        if os.path.isfile(s["path"]):
-            fh = hashlib.sha256()
-            with open(s["path"], "rb") as f:
-                for chunk in iter(lambda: f.read(8192), b""):
-                    fh.update(chunk)
-            file_hashes[os.path.basename(s["path"])] = fh.hexdigest()[:16]
-        else:
-            file_hashes[os.path.basename(s["path"])] = "MISSING"
-
-    # Register in MLflow
-    mlflow.set_experiment(experiment_name)
-    run = mlflow.start_run(run_name=f"Dataset_{dataset_name}_{version}")
-    run_id = run.info.run_id
-
-    mlflow.log_params({
-        "dataset_root": dataset_dir,
-        "num_samples": len(samples),
-        "num_positive": sum(1 for s in samples if s["label"] == 1),
-        "num_negative": sum(1 for s in samples if s["label"] == 0),
-    })
-
-    mlflow.set_tags({
-        "dataset_name": dataset_name,
-        "version": version,
-        "manifest_hash": manifest_hash,
-        "samples_hash": samples_hash,
-        "file_hashes": json.dumps(file_hashes),
-    })
-
-    # Save manifest hash as an artifact for offline verification
-    prov_dir = f"_dataset_prov_{uuid.uuid4().hex[:8]}"
-    os.makedirs(prov_dir, exist_ok=True)
-    prov_path = os.path.join(prov_dir, "dataset_provenance.json")
-    with open(prov_path, "w") as f:
-        json.dump({
-            "dataset_name": dataset_name,
-            "version": version,
-            "dataset_root": dataset_dir,
-            "manifest_hash": manifest_hash,
-            "samples_hash": samples_hash,
-            "file_hashes": file_hashes,
-            "num_samples": len(samples),
-        }, f, indent=2)
-    mlflow.log_artifact(prov_path, artifact_path="provenance")
-    shutil.rmtree(prov_dir, ignore_errors=True)
-
-    mlflow.end_run()
-    print(f"  [register_dataset] {dataset_name} v{version} → run_id={run_id}")
-    print(f"    manifest_hash : {manifest_hash[:16]}…")
-    print(f"    samples_hash  : {samples_hash[:16]}…")
-    return run_id
-
-
-def _verify_dataset(
-    manifest_path: str,
-    data_root: str,
-    dataset_run_id: str | None,
-) -> dict:
-    """Verify the current dataset against the registered version in MLflow.
-
-    Checks:
-      1. Manifest hash matches (file-level integrity)
-      2. Samples hash matches (content-level integrity, order-independent)
-      3. All WSI files exist on disk
-
-    Returns a dict with verification results.
-    """
-    result: dict = {
-        "verified": False,
-        "dataset_run_id": dataset_run_id,
-        "manifest_hash_match": None,
-        "samples_hash_match": None,
-        "files_missing": 0,
-        "files_total": 0,
-        "details": [],
-    }
-
-    if not dataset_run_id:
-        result["details"].append("No Dataset_Registry run found — skipping verification")
-        return result
-
-    # Fetch registered hashes
-    try:
-        reg_run = mlflow.get_run(dataset_run_id)
-        reg_tags = reg_run.data.tags
-        reg_manifest_hash = reg_tags.get("manifest_hash", "")
-        reg_samples_hash = reg_tags.get("samples_hash", "")
-        reg_file_hashes_str = reg_tags.get("file_hashes", "")
-        reg_file_hashes = json.loads(reg_file_hashes_str) if reg_file_hashes_str else {}
-    except Exception as e:
-        result["details"].append(f"Failed to fetch Dataset_Registry run: {e}")
-        return result
-
-    # Compute current hashes
-    curr_manifest_hash = _hash_manifest(manifest_path)
-    result["manifest_hash_match"] = curr_manifest_hash == reg_manifest_hash
-
-    if not result["manifest_hash_match"]:
-        result["details"].append(
-            f"Manifest hash mismatch: "
-            f"current={curr_manifest_hash[:16]}… registered={reg_manifest_hash[:16]}…"
-        )
-
-    # Compute samples hash
-    df = pd.read_csv(manifest_path)
-    samples = []
-    for _, row in df.iterrows():
-        rel = row["wsi_path"]
-        full = os.path.join(data_root, rel) if not os.path.isabs(rel) else rel
-        samples.append({"path": full, "label": int(row["cancer"])})
-    curr_samples_hash = _hash_samples(samples)
-    result["samples_hash_match"] = curr_samples_hash == reg_samples_hash
-
-    if not result["samples_hash_match"]:
-        result["details"].append(
-            f"Samples hash mismatch: "
-            f"current={curr_samples_hash[:16]}… registered={reg_samples_hash[:16]}…"
-        )
-
-    # Check file existence
-    missing = 0
-    for s in samples:
-        if not os.path.isfile(s["path"]):
-            missing += 1
-    result["files_total"] = len(samples)
-    result["files_missing"] = missing
-
-    if missing > 0:
-        result["details"].append(f"{missing}/{len(samples)} WSI files missing on disk")
-
-    # Overall verdict
-    result["verified"] = (
-        result["manifest_hash_match"]
-        and result["samples_hash_match"]
-        and missing == 0
-    )
-
-    if result["verified"]:
-        result["details"].append("✅ Dataset verified — matches registered version")
-    else:
-        result["details"].append("❌ Dataset verification FAILED")
-
-    return result
+# ── Dataset verification lives in register_dataset.py ─────────────────
 
 
 def _detect_hardware():
@@ -881,12 +638,9 @@ def _build_prov_document(
     if verification:
         meta_entity["gen:dataset_verified"] = [str(verification.get("verified", False))]
         meta_entity["gen:dataset_run_id"] = [verification.get("dataset_run_id", "")]
-        mh = verification.get("manifest_hash_match")
-        if mh is not None:
-            meta_entity["gen:manifest_hash_match"] = [str(mh)]
-        sh = verification.get("samples_hash_match")
-        if sh is not None:
-            meta_entity["gen:samples_hash_match"] = [str(sh)]
+        fsm = verification.get("file_sizes_match")
+        if fsm is not None:
+            meta_entity["gen:file_sizes_match"] = [str(fsm)]
         fm = verification.get("files_missing", 0)
         ft = verification.get("files_total", 0)
         meta_entity["gen:files_missing"] = [str(fm)]
@@ -1237,8 +991,7 @@ def _run_autolog(func, model_name, experiment_name, test_size, random_state, log
         # Log verification results as params + tags
         mlflow.log_params({
             "dataset_verified": verification["verified"],
-            "dataset_manifest_hash_match": verification["manifest_hash_match"] is True,
-            "dataset_samples_hash_match": verification["samples_hash_match"] is True,
+            "dataset_file_sizes_match": verification["file_sizes_match"] is True,
             "dataset_files_missing": verification["files_missing"],
             "dataset_files_total": verification["files_total"],
         })
