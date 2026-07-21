@@ -59,9 +59,7 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def experiment(self) -> MlflowClient:
         if not self._initialized:
             exp = super().experiment
-            # Only start a run if none is already active (e.g. from @autolog)
-            if not mlflow.active_run():
-                mlflow.start_run(self.run_id, log_system_metrics=self.log_system_metrics)
+            mlflow.start_run(self.run_id, log_system_metrics=self.log_system_metrics)
             return exp
 
         return super().experiment
