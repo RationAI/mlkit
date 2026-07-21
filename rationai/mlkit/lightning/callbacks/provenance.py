@@ -16,7 +16,6 @@ Example::
 
 from __future__ import annotations
 
-import io
 import os
 import re
 import json
@@ -25,10 +24,7 @@ import shutil
 import platform
 import hashlib
 import subprocess
-import contextlib
 from datetime import datetime, timezone
-from functools import partial
-from collections.abc import Callable
 
 import mlflow
 import torch
@@ -274,60 +270,6 @@ def _scheduler_summary(scheduler):
                 info[f"sch_opt_{name}"] = value
 
     return info
-
-
-# ──────────────────────────────────────────────
-# Console stream capture
-# ──────────────────────────────────────────────
-
-_CONSOLE_LOG_NAME = "console.log"
-
-
-class _StreamCapture:
-    """Captures stdout/stderr and writes them to MLflow as console.log."""
-
-    def __init__(self, run_id: str):
-        self.run_id = run_id
-        self._buffer = io.StringIO()
-        self._originals = {}
-
-    def __enter__(self):
-        import sys
-        for stream_name in ("stdout", "stderr"):
-            stream = getattr(sys, stream_name)
-            original_write = stream.write
-            self._originals[stream_name] = original_write
-
-            def _make_wrapper(buf, orig):
-                def wrapper(text):
-                    buf.write(text)
-                    return orig(text)
-                return wrapper
-
-            setattr(stream, "write", _make_wrapper(self._buffer, self._originals[stream_name]))
-
-    def __exit__(self, *args):
-        import sys
-        for stream_name in ("stdout", "stderr"):
-            original = self._originals.get(stream_name)
-            if original is not None:
-                setattr(getattr(sys, stream_name), "write", original)
-
-        text = self._buffer.getvalue()
-        if text.strip():
-            try:
-                client = mlflow.tracking.MlflowClient()
-                log_path = os.path.join(
-                    f"_mlflow_console_{uuid.uuid4().hex[:8]}",
-                    _CONSOLE_LOG_NAME,
-                )
-                os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                with open(log_path, "w") as f:
-                    f.write(text)
-                client.log_artifact(self.run_id, log_path, artifact_path="logs")
-                shutil.rmtree(os.path.dirname(log_path), ignore_errors=True)
-            except Exception:
-                pass
 
 
 # ──────────────────────────────────────────────
