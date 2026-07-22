@@ -360,10 +360,7 @@ def _build_prov_document(
 
     for key, val in params.items():
         if key.startswith(("opt_", "sch_")):
-            clean = key
-            while clean.startswith(("opt_", "sch_")):
-                if clean.startswith(("opt_", "sch_")):
-                    clean = clean[4:]
+            clean = key.removeprefix("opt_").removeprefix("sch_")
             if f"gen:{clean}" not in run_activity:
                 run_activity[f"gen:{clean}"] = _typed_value(val)
 
@@ -458,13 +455,13 @@ def _build_prov_document(
         meta_entity["gen:split_stratified"] = ["true"]
 
         if split_data.get("train"):
-            meta_entity["gen:split_train"] = [
-                _typed_value(json.dumps(split_data["train"]))[0]
-            ]
+            meta_entity["gen:split_train"] = _typed_value(
+                json.dumps(split_data["train"])
+            )
         if split_data.get("test"):
-            meta_entity["gen:split_test"] = [
-                _typed_value(json.dumps(split_data["test"]))[0]
-            ]
+            meta_entity["gen:split_test"] = _typed_value(
+                json.dumps(split_data["test"])
+            )
 
     if requirements:
         meta_entity["gen:requirements"] = [requirements]
@@ -698,12 +695,11 @@ class ProvenanceCallback(Callback):
             data_root = os.path.dirname(os.path.abspath(manifest_path))
 
         if manifest_path and data_root:
-            from sklearn.model_selection import train_test_split
-
             from rationai.mlkit.provenance.register_dataset import (
                 load_manifest,
             )
 
+            # ── Verification (always) ────────────────────────────
             dataset_run_id = _lookup_dataset_run()
             verification = _verify_dataset(manifest_path, data_root, dataset_run_id)
             self._verification = verification or {}
@@ -711,48 +707,6 @@ class ProvenanceCallback(Callback):
 
             for detail in verification_details:
                 log.info(f"  [ProvenanceCallback] {detail}")
-
-            samples = load_manifest(manifest_path, data_root)
-            train_samples, test_samples = train_test_split(
-                samples,
-                test_size=self.test_size,
-                random_state=self.random_state,
-                stratify=[s["label"] for s in samples],
-            )
-
-            self._split_data = {
-                "train": train_samples,
-                "test": test_samples,
-                "test_size": self.test_size,
-                "random_state": self.random_state,
-            }
-
-            # Log split as artifact
-            split_dir = f"_mlflow_split_{uuid.uuid4().hex[:8]}"
-            os.makedirs(split_dir, exist_ok=True)
-            self._temp_dirs.append(split_dir)
-            for subset_name, subset_samples in [
-                ("train", train_samples),
-                ("test", test_samples),
-            ]:
-                split_file = os.path.join(split_dir, f"{subset_name}_split.csv")
-                pd.DataFrame(subset_samples).to_csv(split_file, index=False)
-
-            mlflow.log_artifacts(split_dir, artifact_path="split")
-
-            # Log split counts
-            train_labels = [s["label"] for s in train_samples]
-            test_labels = [s["label"] for s in test_samples]
-            mlflow.log_params(
-                {
-                    "train_samples": len(train_samples),
-                    "test_samples": len(test_samples),
-                    "train_positive": sum(train_labels),
-                    "train_negative": len(train_labels) - sum(train_labels),
-                    "test_positive": sum(test_labels),
-                    "test_negative": len(test_labels) - sum(test_labels),
-                }
-            )
 
             # Log verification results
             if verification:
@@ -779,6 +733,52 @@ class ProvenanceCallback(Callback):
                         "Dataset verification failed — aborting training.\n"
                         + "\n".join(f"  {d}" for d in verification["details"]),
                     )
+
+            # ── Train/test split (only if test_size > 0) ─────────
+            if self.test_size > 0:
+                from sklearn.model_selection import train_test_split
+
+                samples = load_manifest(manifest_path, data_root)
+                train_samples, test_samples = train_test_split(
+                    samples,
+                    test_size=self.test_size,
+                    random_state=self.random_state,
+                    stratify=[s["label"] for s in samples],
+                )
+
+                self._split_data = {
+                    "train": train_samples,
+                    "test": test_samples,
+                    "test_size": self.test_size,
+                    "random_state": self.random_state,
+                }
+
+                # Log split as artifact
+                split_dir = f"_mlflow_split_{uuid.uuid4().hex[:8]}"
+                os.makedirs(split_dir, exist_ok=True)
+                self._temp_dirs.append(split_dir)
+                for subset_name, subset_samples in [
+                    ("train", train_samples),
+                    ("test", test_samples),
+                ]:
+                    split_file = os.path.join(split_dir, f"{subset_name}_split.csv")
+                    pd.DataFrame(subset_samples).to_csv(split_file, index=False)
+
+                mlflow.log_artifacts(split_dir, artifact_path="split")
+
+                # Log split counts
+                train_labels = [s["label"] for s in train_samples]
+                test_labels = [s["label"] for s in test_samples]
+                mlflow.log_params(
+                    {
+                        "train_samples": len(train_samples),
+                        "test_samples": len(test_samples),
+                        "train_positive": sum(train_labels),
+                        "train_negative": len(train_labels) - sum(train_labels),
+                        "test_positive": sum(test_labels),
+                        "test_negative": len(test_labels) - sum(test_labels),
+                    }
+                )
         else:
             log.warning(
                 "[ProvenanceCallback] No manifest.csv found — "

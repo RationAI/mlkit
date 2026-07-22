@@ -162,8 +162,15 @@ def _verify_dataset(
         else:
             curr_file_sizes[basename] = -1  # missing
 
-    # Compare sizes
-    result["file_sizes_match"] = curr_file_sizes == reg_file_sizes
+    # Compare sizes — must have the same keys AND the same sizes
+    if set(curr_file_sizes) != set(reg_file_sizes):
+        result["details"].append(
+            f"File manifest mismatch: expected {len(reg_file_sizes)} file(s), found {len(curr_file_sizes)} file(s)"
+            
+        )
+    result["file_sizes_match"] = all(
+        curr_file_sizes.get(k) == reg_file_sizes[k] for k in reg_file_sizes
+    )
 
     if not result["file_sizes_match"]:
         mismatched = [
