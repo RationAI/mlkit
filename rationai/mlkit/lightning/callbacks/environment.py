@@ -15,17 +15,19 @@ Example::
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
-import json
 import logging
 import os
 import platform
 import shutil
 import subprocess
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import mlflow
+import pandas as pd
 import torch
 from lightning.pytorch.callbacks import Callback
 
@@ -37,18 +39,16 @@ log = logging.getLogger(__name__)
 # Helpers
 # ──────────────────────────────────────────────
 
-def _lookup_user_run():
+def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
     """Find the user run from User_Registry.  Auto-detect username."""
     from rationai.mlkit.provenance.register_dataset import _lookup_experiment
 
     username = os.environ.get("MLFLOW_USER")
     if not username:
-        try:
+        with contextlib.suppress(subprocess.CalledProcessError):
             username = subprocess.check_output(
                 ["git", "config", "user.name"], stderr=subprocess.DEVNULL,
             ).decode().strip()
-        except subprocess.CalledProcessError:
-            pass
     if not username:
         username = os.environ.get("USER", "unknown")
 
@@ -56,20 +56,21 @@ def _lookup_user_run():
     if exp_id is None:
         return None, {}
 
-    runs = mlflow.search_runs(experiment_ids=[exp_id])
-    if runs.empty:
+    _runs_df = mlflow.search_runs(experiment_ids=[exp_id])
+    runs_df: pd.DataFrame = _runs_df  # search_runs may return RunList in old mlflow
+    if runs_df.empty:
         return None, {}
 
-    matched = runs[runs["tags.username"] == username]
+    matched = runs_df[runs_df["tags.username"] == username]
     if matched.empty:
-        matched = runs.head(1)
+        matched = runs_df.head(1)
 
     row = matched.iloc[0]
-    run = mlflow.get_run(row.run_id)
-    return row.run_id, dict(run.data.tags)
+    run_obj = mlflow.get_run(row.run_id)
+    return row.run_id, dict(run_obj.data.tags)
 
 
-def _detect_hardware():
+def _detect_hardware() -> dict[str, str | int]:
     """Detect CPU/GPU/hardware info."""
     info: dict[str, str | int] = {}
 
@@ -96,7 +97,7 @@ def _detect_hardware():
     return info
 
 
-def _detect_docker():
+def _detect_docker() -> dict[str, str | bool]:
     """Detect if running inside Docker and extract container info."""
     info: dict[str, str | bool] = {"docker": False}
 
@@ -131,7 +132,7 @@ def _detect_docker():
             pass
 
     if info["docker"]:
-        cid = info.get("container_id_short", "")
+        cid = str(info.get("container_id_short", ""))
         if cid:
             try:
                 result = subprocess.run(
@@ -202,14 +203,14 @@ class EnvironmentCallback(Callback):
         self._git_commit: str = "unknown"
         self._git_url: str = "unknown"
         self._git_branch: str = "unknown"
-        self._hardware: dict = {}
-        self._docker: dict = {}
+        self._hardware: dict[str, str | int] = {}
+        self._docker: dict[str, str | bool] = {}
         self._frozen_requirements: str | None = None
         self._user_run_id: str | None = None
-        self._user_tags: dict = {}
+        self._user_tags: dict[str, str] = {}
         self._temp_dirs: list[str] = []
 
-    def on_fit_start(self, trainer, pl_module):  # noqa: ARG002
+    def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Capture environment metadata at the start of training."""
         if not mlflow.active_run():
             return
@@ -217,18 +218,17 @@ class EnvironmentCallback(Callback):
         # ── Git info (read from MLflow tags set by MLFlowLogger) ──
         try:
             run = mlflow.active_run()
+            git_tags: dict[str, str] = {}
             if run and run.info and run.info.run_id:
                 client = mlflow.tracking.MlflowClient()
                 run_data = client.get_run(run.info.run_id)
-                tags = run_data.data.tags or {}
-            else:
-                tags = {}
-            self._git_commit = tags.get("mlflow.source.git.commit",
-                                        tags.get("git.commit", "unknown"))
-            self._git_url = tags.get("mlflow.source.git.repoUrl",
-                                     tags.get("git.repo_url", "unknown"))
-            self._git_branch = tags.get("mlflow.source.git.branch",
-                                        tags.get("git.branch", "unknown"))
+                git_tags = dict(run_data.data.tags) if run_data.data.tags else {}
+            self._git_commit = git_tags.get("mlflow.source.git.commit",
+                                        git_tags.get("git.commit", "unknown"))
+            self._git_url = git_tags.get("mlflow.source.git.repoUrl",
+                                     git_tags.get("git.repo_url", "unknown"))
+            self._git_branch = git_tags.get("mlflow.source.git.branch",
+                                 git_tags.get("git.branch", "unknown"))
         except Exception as e:
             if self.strict:
                 raise
@@ -269,25 +269,25 @@ class EnvironmentCallback(Callback):
             log.warning("[EnvironmentCallback] Docker detection failed: %s", e)
 
         # ── Log tags (git + user) ───────────────────────────────
-        tags: dict[str, str] = {}
+        env_tags: dict[str, str] = {}
         if self._user_run_id:
-            tags["user_run_id"] = self._user_run_id
+            env_tags["user_run_id"] = self._user_run_id
             for key in ("username", "real_name", "organization"):
                 if key in self._user_tags:
-                    tags[key] = self._user_tags[key]
+                    env_tags[key] = self._user_tags[key]
 
         from rationai.mlkit.provenance.register_dataset import _lookup_dataset_run
         dataset_run_id = _lookup_dataset_run()
         if dataset_run_id:
-            tags["dataset_run_id"] = dataset_run_id
+            env_tags["dataset_run_id"] = dataset_run_id
 
-        tags.update({
+        env_tags.update({
             "git_commit": self._git_commit,
             "git_url": self._git_url,
             "git_branch": self._git_branch,
-            "prov_start_time": datetime.now(timezone.utc).isoformat(),
+            "prov_start_time": datetime.now(UTC).isoformat(),
         })
-        mlflow.set_tags(tags)
+        mlflow.set_tags(env_tags)
 
         # ── Log hardware + docker params ────────────────────────
         all_params: dict[str, str | float | int] = {**self._hardware, **self._docker}

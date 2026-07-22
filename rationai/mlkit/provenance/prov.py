@@ -7,10 +7,10 @@ training provenance callbacks.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import re
-import datetime as _dt
 from typing import Any
 
 
@@ -55,7 +55,7 @@ def get_prov_prefixes(override: dict[str, str] | None = None) -> dict[str, str]:
 
 def _safe_id(name: str) -> str:
     """Sanitise a name so it can be used as a PROV identifier fragment."""
-    return re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
 
 def _qualified(prefix: str, local: str) -> str:
@@ -160,10 +160,10 @@ def build_user_prov(
     main_activity: dict[str, Any] = {}
     main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": meta_id}
+        {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]
     main_activity["dct:hasPart"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": run_act_id}
+        {"type": "prov:QUALIFIED_NAME", "$": run_act_id},
     ]
     activities[main_act_id] = main_activity
 
@@ -243,7 +243,7 @@ def build_dataset_prov(
         "schema:name": _typed_value(dataset_name),
         "prov:type": [_qualified_name("sosa", "Sample")],
         "dct:description": _typed_value(
-            f"Dataset {dataset_name} v{version} ({num_samples} samples)"
+            f"Dataset {dataset_name} v{version} ({num_samples} samples)",
         ),
     }
     if manifest_path:
@@ -288,10 +288,10 @@ def build_dataset_prov(
     main_activity: dict[str, Any] = {}
     main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": meta_id}
+        {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]
     main_activity["dct:hasPart"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": run_act_id}
+        {"type": "prov:QUALIFIED_NAME", "$": run_act_id},
     ]
     activities[main_act_id] = main_activity
 

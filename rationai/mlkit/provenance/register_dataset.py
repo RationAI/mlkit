@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import uuid
+from typing import Any
 
 import mlflow
 import pandas as pd
@@ -13,7 +14,7 @@ import pandas as pd
 
 # ── Internal helpers ────────────────────────────────────────────────────
 
-def _lookup_experiment(name):
+def _lookup_experiment(name: str) -> str | None:
     """Return the MLflow experiment ID for *name*, or None."""
     exp = mlflow.get_experiment_by_name(name)
     return exp.experiment_id if exp else None
@@ -33,10 +34,10 @@ def _lookup_dataset_run() -> str | None:
         experiment_ids=[exp_id],
         order_by=["start_time DESC"],
     )
-    if runs_df.empty:
+    if pd.DataFrame(runs_df).empty:
         return None
 
-    return runs_df.iloc[0]["run_id"]
+    return pd.DataFrame(runs_df).iloc[0]["run_id"]
 
 
 def _detect_manifest() -> tuple[str | None, str | None]:
@@ -50,13 +51,13 @@ def _detect_manifest() -> tuple[str | None, str | None]:
                 return (
                     os.path.join(dirpath, "manifest.csv"),
                     os.path.dirname(os.path.abspath(
-                        os.path.join(dirpath, "manifest.csv")
+                        os.path.join(dirpath, "manifest.csv"),
                     )),
                 )
     return None, None
 
 
-def load_manifest(manifest_path: str, data_root: str) -> list[dict]:
+def load_manifest(manifest_path: str, data_root: str) -> list[dict[str, Any]]:
     """Load a manifest.csv and resolve WSI paths.
 
     Returns a list of dicts with keys ``path`` (absolute) and ``label``.
@@ -65,7 +66,7 @@ def load_manifest(manifest_path: str, data_root: str) -> list[dict]:
     ``ProvenanceCallback`` to avoid duplicating the CSV iteration pattern.
     """
     df = pd.read_csv(manifest_path)
-    samples: list[dict] = []
+    samples: list[dict[str, Any]] = []
     for _, row in df.iterrows():
         rel = row["wsi_path"]
         full = os.path.join(data_root, rel) if not os.path.isabs(rel) else rel
@@ -76,7 +77,7 @@ def load_manifest(manifest_path: str, data_root: str) -> list[dict]:
 def verify_dataset(
     manifest_path: str | None = None,
     data_root: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Public entry point — verify the current dataset against MLflow.
 
     Auto-detects the manifest if *manifest_path* is not given.
@@ -110,7 +111,7 @@ def _verify_dataset(
     manifest_path: str,
     data_root: str,
     dataset_run_id: str | None,
-) -> dict:
+) -> dict[str, Any]:
     """Verify the current dataset against the registered version in MLflow.
 
     Checks:
@@ -119,7 +120,7 @@ def _verify_dataset(
 
     Returns a dict with verification results.
     """
-    result: dict = {
+    result: dict[str, Any] = {
         "verified": False,
         "dataset_run_id": dataset_run_id,
         "file_sizes_match": None,
@@ -143,7 +144,7 @@ def _verify_dataset(
         return result
 
     samples = load_manifest(manifest_path, data_root)
-    curr_file_sizes = {}
+    curr_file_sizes: dict[str, int] = {}
     for s in samples:
         basename = os.path.basename(s["path"])
         if os.path.isfile(s["path"]):
@@ -163,7 +164,7 @@ def _verify_dataset(
             result["details"].append(
                 f"File size mismatch on {len(mismatched)} file(s): "
                 + ", ".join(sorted(mismatched)[:5])
-                + ("…" if len(mismatched) > 5 else "")
+                + ("…" if len(mismatched) > 5 else ""),
             )
 
     # Check file existence
@@ -192,7 +193,7 @@ def register_dataset(
     dataset_name: str | None = None,
     version: str = "1.0.0",
     experiment_name: str = "Dataset_Registry",
-):
+) -> str:
     """Register a dataset in MLflow's Dataset_Registry experiment.
 
     Captures per-file metadata (size, last modified) and stores it as tags
@@ -218,7 +219,7 @@ def register_dataset(
     if not os.path.isfile(manifest_path):
         raise FileNotFoundError(
             f"No manifest.csv found in {dataset_dir}. "
-            "Dataset registration requires a manifest.csv file."
+            "Dataset registration requires a manifest.csv file.",
         )
 
     if dataset_name is None:
@@ -260,7 +261,7 @@ def register_dataset(
         })
 
         # ── PROV-O document (W3C PROV-O compatible) ────────────
-        from rationai.mlkit.provenance.prov import build_dataset_prov  # noqa: PLC0415
+        from rationai.mlkit.provenance.prov import build_dataset_prov
 
         prov_doc = build_dataset_prov(
             run_id=run_id,

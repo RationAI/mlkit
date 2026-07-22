@@ -15,35 +15,35 @@ the ``MLFLOW_TRACKING_URI`` environment variable.
 from __future__ import annotations
 
 import os
+from typing import Any
+
 
 # ── Set default tracking URI before any mlflow import runs ───────────
 if "MLFLOW_TRACKING_URI" not in os.environ:
     os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
 
 # Now safe to import - all child modules will pick up the env var
-from .prov import (  # noqa: E402
+from rationai.mlkit.provenance.prov import (
     build_dataset_prov,
     build_user_prov,
 )
-from .register_dataset import (  # noqa: E402
+from rationai.mlkit.provenance.register_dataset import (
     register_dataset,
     verify_dataset,
 )
-from .register_user import register_new_user  # noqa: E402
+from rationai.mlkit.provenance.register_user import register_new_user
+
 
 __all__ = [
-    # Dataset
-    "register_dataset",
-    "verify_dataset",
-    # User registration
-    "register_new_user",
-    # PROV document builders
-    "build_user_prov",
     "build_dataset_prov",
+    "build_user_prov",
+    "register_dataset",
+    "register_new_user",
+    "verify_dataset",
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Raise helpful error for removed ``autolog``."""
     if name == "autolog":
         raise ImportError(

@@ -29,11 +29,11 @@ import os
 import re
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import mlflow
 import pandas as pd
-import torch
 from lightning.pytorch.callbacks import Callback
 
 
@@ -93,7 +93,7 @@ _WSI_PARAM_KEYS = {
 # Model / Optimizer / Scheduler summaries
 # ──────────────────────────────────────────────
 
-def _model_summary(model):
+def _model_summary(model: Any) -> dict[str, str | int]:
     """Extract architecture details from a torch.nn.Module."""
     info: dict[str, str | int] = {}
 
@@ -112,18 +112,19 @@ def _model_summary(model):
         children = len(list(module.children()))
         layer_lines.append(
             f"{name}({type(module).__name__}): params={param_count}, "
-            f"children={children}"
+            f"children={children}",
         )
 
-    info["layer_summary"] = "\n".join(layer_lines[:20])
+    layer_summary: str = "\n".join(layer_lines[:20])
     if len(layer_lines) > 20:
-        info["layer_summary"] += f"\n... ({len(layer_lines)} layers total)"
+        layer_summary += f"\n... ({len(layer_lines)} layers total)"
+    info["layer_summary"] = layer_summary
 
     info["model_class"] = type(model).__name__
     return info
 
 
-def _optimizer_summary(optimizer):
+def _optimizer_summary(optimizer: Any) -> dict[str, str | float]:
     """Extract optimizer settings from torch.optim.Optimizer."""
     info: dict[str, str | float] = {}
     info["optimizer_type"] = type(optimizer).__name__
@@ -133,7 +134,7 @@ def _optimizer_summary(optimizer):
     return info
 
 
-def _scheduler_summary(scheduler):
+def _scheduler_summary(scheduler: Any) -> dict[str, str | float]:
     """Extract scheduler settings."""
     info: dict[str, str | float] = {}
     if scheduler is None:
@@ -145,7 +146,7 @@ def _scheduler_summary(scheduler):
                  "patience", "min_lr", "T_max", "eta_min"):
         val = getattr(scheduler, attr, None)
         if val is not None:
-            info[f"sch_{attr}"] = list(val) if isinstance(val, (list, tuple)) else val
+            info[f"sch_{attr}"] = str(list(val)) if isinstance(val, (list, tuple)) else str(val)
 
     if hasattr(scheduler, "optimizer"):
         for name, value in scheduler.optimizer.defaults.items():
@@ -160,26 +161,26 @@ def _scheduler_summary(scheduler):
 # ──────────────────────────────────────────────
 
 def _safe_id(name: str) -> str:
-    return re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
 
 def _qualified(prefix: str, local: str) -> str:
     return f"{prefix}:{local}"
 
 
-def _typed_value(value, type_prefix="xsd", type_local="string") -> list:
+def _typed_value(value: object, type_prefix: str = "xsd", type_local: str = "string") -> list[str]:
     return [str(value)]
 
 
-def _qualified_name(type_prefix: str, type_local: str) -> dict:
+def _qualified_name(type_prefix: str, type_local: str) -> dict[str, str]:
     return {"type": "prov:QUALIFIED_NAME", "$": f"{type_prefix}:{type_local}"}
 
 
 def _iso_timestamp(ts_ms: int | None = None) -> str:
     if ts_ms is not None:
-        dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+        dt = datetime.fromtimestamp(ts_ms / 1000, tz=UTC)
     else:
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.000+00:00")
 
 
@@ -191,13 +192,12 @@ def _build_prov_document(
     tags: dict[str, str],
     start_time_ms: int | None = None,
     end_time_ms: int | None = None,
-    split_data: dict | None = None,
+    split_data: dict[str, object] | None = None,
     requirements: str | None = None,
-    verification: dict | None = None,
+    verification: dict[str, object] | None = None,
     prov_prefixes: dict[str, str] | None = None,
-) -> dict:
+) -> dict[str, object]:
     """Build an OpenProvenance-compatible PROV document dict."""
-
     username = tags.get("username", tags.get("mlflow.user", "unknown"))
     agent_local = _safe_id(f"user_{username}")
     agent_id = _qualified("gen", agent_local)
@@ -211,11 +211,11 @@ def _build_prov_document(
     main_act_local = f"TrainingRun_{run_id[:8]}"
     main_act_id = _qualified("blank", main_act_local)
 
-    entities: dict[str, dict] = {}
-    activities: dict[str, dict] = {}
-    agents: dict[str, dict] = {}
-    used: dict[str, dict] = {}
-    was_associated_with: dict[str, dict] = {}
+    entities: dict[str, Any] = {}
+    activities: dict[str, Any] = {}
+    agents: dict[str, Any] = {}
+    used: dict[str, Any] = {}
+    was_associated_with: dict[str, Any] = {}
 
     rel_counter = [0]
 
@@ -225,7 +225,7 @@ def _build_prov_document(
         return rid
 
     # ── 1. AGENT ───────────────────────────────────────────
-    agent_props: dict[str, list] = {}
+    agent_props: dict[str, Any] = {}
     real_name = tags.get("real_name", username)
     agent_props["schema:name"] = _typed_value(real_name)
     email = tags.get("mlflow.source.git.user.email", f"{username}@unknown")
@@ -248,7 +248,7 @@ def _build_prov_document(
     if image_path_candidates:
         wsi_local = _safe_id(f"wsi_{image_path_candidates}")
         wsi_id = _qualified("gen", wsi_local)
-        wsi_props: dict[str, list] = {
+        wsi_props: dict[str, Any] = {
             "schema:name": _typed_value(f"Input: {image_path_candidates}"),
             "prov:type": [_qualified_name("sosa", "Sample")],
         }
@@ -287,7 +287,7 @@ def _build_prov_document(
         }
 
     # ── 3. RUN ACTIVITY ────────────────────────────────────
-    run_activity: dict[str, object] = {}
+    run_activity: dict[str, Any] = {}
     run_activity["prov:type"] = [_qualified_name("schema", "Action")]
     run_activity["prov:startTime"] = [_iso_timestamp(start_time_ms)]
     run_activity["prov:endTime"] = [_iso_timestamp(end_time_ms)]
@@ -322,12 +322,10 @@ def _build_prov_document(
             run_activity[f"gen:{key}"] = _typed_value(params[key])
 
     for key, val in params.items():
-        if key.startswith("opt_") or key.startswith("sch_"):
+        if key.startswith(("opt_", "sch_")):
             clean = key
-            while clean.startswith("opt_") or clean.startswith("sch_"):
-                if clean.startswith("opt_"):
-                    clean = clean[4:]
-                elif clean.startswith("sch_"):
+            while clean.startswith(("opt_", "sch_")):
+                if clean.startswith(("opt_", "sch_")):
                     clean = clean[4:]
             if f"gen:{clean}" not in run_activity:
                 run_activity[f"gen:{clean}"] = _typed_value(val)
@@ -368,7 +366,7 @@ def _build_prov_document(
     activities[run_act_id] = run_activity
 
     # ── 4. CPM METADATA ENTITY ─────────────────────────────
-    meta_entity: dict[str, list] = {}
+    meta_entity: dict[str, Any] = {}
     meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
     org_val = tags.get("organization", "")
     if org_val:
@@ -387,9 +385,9 @@ def _build_prov_document(
             safe_key = _safe_id(key)
             meta_entity[f"gen:{safe_key}"] = _typed_value(val)
 
-    for key, val in metrics.items():
+    for key, mval in metrics.items():
         safe_key = _safe_id(key)
-        meta_entity[f"gen:{safe_key}"] = _typed_value(val)
+        meta_entity[f"gen:{safe_key}"] = _typed_value(mval)
 
     if split_data:
         meta_entity["gen:split_test_size"] = _typed_value(split_data.get("test_size", "0.2"))
@@ -427,20 +425,20 @@ def _build_prov_document(
 
     entities[meta_id] = meta_entity
 
-    was_generated_by: dict[str, dict] = {}
+    was_generated_by: dict[str, Any] = {}
     was_generated_by[_blank_rel_id()] = {
         "prov:entity": meta_id,
         "prov:activity": run_act_id,
     }
 
     # ── 5. CPM MAIN ACTIVITY ───────────────────────────────
-    main_activity: dict[str, object] = {}
+    main_activity: dict[str, Any] = {}
     main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": meta_id}
+        {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]
     main_activity["dct:hasPart"] = [
-        {"type": "prov:QUALIFIED_NAME", "$": run_act_id}
+        {"type": "prov:QUALIFIED_NAME", "$": run_act_id},
     ]
     activities[main_act_id] = main_activity
 
@@ -528,8 +526,8 @@ class ProvenanceCallback(Callback):
         # Internal state (populated by on_fit_start or sibling callbacks)
         self._run_id: str | None = None
         self._temp_dirs: list[str] = []
-        self._split_data: dict | None = None
-        self._verification: dict | None = None
+        self._split_data: dict[str, object] | None = None
+        self._verification: dict[str, object] | None = None
         self._frozen_requirements: str | None = None
         self._git_commit: str = "unknown"
         self._git_url: str = "unknown"
@@ -537,12 +535,12 @@ class ProvenanceCallback(Callback):
 
     # ── helpers ──────────────────────────────────────────────
 
-    def _gather_from_siblings(self, trainer) -> None:
+    def _gather_from_siblings(self, trainer: Any) -> None:
         """Read data already collected by sibling callbacks."""
-        from rationai.mlkit.lightning.callbacks.environment import EnvironmentCallback
         from rationai.mlkit.lightning.callbacks.dataset_verification import (
             DatasetVerificationCallback,
         )
+        from rationai.mlkit.lightning.callbacks.environment import EnvironmentCallback
 
         for cb in trainer.callbacks:
             if isinstance(cb, EnvironmentCallback):
@@ -554,7 +552,7 @@ class ProvenanceCallback(Callback):
                 self._verification = getattr(cb, "_verification", None)
                 self._split_data = getattr(cb, "_split_data", None)
 
-    def _fallback_on_fit_start(self, trainer, pl_module):  # noqa: ARG002
+    def _fallback_on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Do environment + verification work when no sibling callbacks exist."""
         from rationai.mlkit.lightning.callbacks.environment import (
             _detect_docker,
@@ -571,18 +569,17 @@ class ProvenanceCallback(Callback):
         # ── Git info (read from MLflow tags set by MLFlowLogger) ──
         try:
             run = mlflow.active_run()
+            run_tags: dict[str, str] = {}
             if run and run.info and run.info.run_id:
                 client = mlflow.tracking.MlflowClient()
                 run_data = client.get_run(run.info.run_id)
-                tags = run_data.data.tags or {}
-            else:
-                tags = {}
-            self._git_commit = tags.get("mlflow.source.git.commit",
-                                        tags.get("git.commit", "unknown"))
-            self._git_url = tags.get("mlflow.source.git.repoUrl",
-                                     tags.get("git.repo_url", "unknown"))
-            self._git_branch = tags.get("mlflow.source.git.branch",
-                                        tags.get("git.branch", "unknown"))
+                run_tags = dict(run_data.data.tags) if run_data.data.tags else {}
+            self._git_commit = run_tags.get("mlflow.source.git.commit",
+                                        run_tags.get("git.commit", "unknown"))
+            self._git_url = run_tags.get("mlflow.source.git.repoUrl",
+                                     run_tags.get("git.repo_url", "unknown"))
+            self._git_branch = run_tags.get("mlflow.source.git.branch",
+                                        run_tags.get("git.branch", "unknown"))
         except Exception as e:
             if self.strict:
                 raise
@@ -607,16 +604,18 @@ class ProvenanceCallback(Callback):
             manifest_path, data_root = _detect_manifest()
 
         if manifest_path and data_root:
+            from sklearn.model_selection import train_test_split
+
             from rationai.mlkit.provenance.register_dataset import (
                 load_manifest,
             )
-            from sklearn.model_selection import train_test_split
 
             dataset_run_id = _lookup_dataset_run()
             verification = _verify_dataset(manifest_path, data_root, dataset_run_id)
             self._verification = verification or {}
+            verification_details: list[str] = verification.get("details", [])
 
-            for detail in self._verification.get("details", []):
+            for detail in verification_details:
                 log.info(f"  [ProvenanceCallback] {detail}")
 
             samples = load_manifest(manifest_path, data_root)
@@ -679,7 +678,7 @@ class ProvenanceCallback(Callback):
                 if self.fail_fast and not verification["verified"]:
                     raise RuntimeError(
                         "Dataset verification failed — aborting training.\n"
-                        + "\n".join(f"  {d}" for d in verification["details"])
+                        + "\n".join(f"  {d}" for d in verification["details"]),
                     )
         else:
             log.warning("[ProvenanceCallback] No manifest.csv found — "
@@ -701,7 +700,7 @@ class ProvenanceCallback(Callback):
             "git_commit": self._git_commit,
             "git_url": self._git_url,
             "git_branch": self._git_branch,
-            "prov_start_time": datetime.now(timezone.utc).isoformat(),
+            "prov_start_time": datetime.now(UTC).isoformat(),
         })
         mlflow.set_tags(tags)
 
@@ -730,7 +729,7 @@ class ProvenanceCallback(Callback):
 
     # ── lightning hooks ───────────────────────────────────────
 
-    def _ensure_active_run(self, trainer) -> str | None:
+    def _ensure_active_run(self, trainer: Any) -> str | None:
         """Ensure MLflow has an active run by triggering the logger's experiment.
 
         Returns the run_id if successful, or None if no MLFlowLogger is present.
@@ -752,7 +751,7 @@ class ProvenanceCallback(Callback):
         run = mlflow.active_run()
         return run.info.run_id if run else None
 
-    def on_fit_start(self, trainer, pl_module):  # noqa: ARG002
+    def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Gather environment/verification data from siblings or fall back."""
         from rationai.mlkit.lightning.callbacks.dataset_verification import (
             DatasetVerificationCallback,
@@ -778,17 +777,22 @@ class ProvenanceCallback(Callback):
             # No siblings — do everything ourselves
             self._fallback_on_fit_start(trainer, pl_module)
 
-    def on_fit_end(self, trainer, pl_module):  # noqa: ARG002
+    def on_fit_end(self, trainer: Any, pl_module: Any) -> None:
         """Log model/optimizer/scheduler summaries and PROV document."""
-        active_run = mlflow.active_run()
-        if not active_run:
-            # Fallback: try to get run_id from the logger directly
+        _active_run = mlflow.active_run()
+        if _active_run:
+            run_id: str = _active_run.info.run_id
+        elif self._run_id:
+            run_id = self._run_id
+        else:
             self._ensure_active_run(trainer)
             if self._run_id:
-                active_run = mlflow.tracking.MlflowClient().get_run(self._run_id)
+                run_id = self._run_id
             else:
                 return
-        run_id = active_run.info.run_id
+
+        # Get a Run object for metadata access
+        active_run = mlflow.get_run(run_id)
 
         # ── Model summary ───────────────────────────────────────
         if self.register_model and pl_module is not None:
@@ -851,8 +855,8 @@ class ProvenanceCallback(Callback):
                     "test_size": self.test_size,
                     "random_state": self.random_state,
                     "stratified": True,
-                    "train_count": len(self._split_data["train"]) if self._split_data else 0,
-                    "test_count": len(self._split_data["test"]) if self._split_data else 0,
+                    "train_count": len(self._split_data["train"]) if isinstance(self._split_data, dict) else 0,  # type: ignore[arg-type]
+                    "test_count": len(self._split_data["test"]) if isinstance(self._split_data, dict) else 0,  # type: ignore[arg-type]
                     "train": self._split_data["train"] if self._split_data else None,
                     "test": self._split_data["test"] if self._split_data else None,
                 } if self._split_data else None,

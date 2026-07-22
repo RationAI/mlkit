@@ -28,6 +28,7 @@ def register_new_user(
         The MLflow run_id of the registration run.
     """
     experiment_name = "User_Registry"
+    experiment_id: str | None
     try:
         experiment_id = mlflow.create_experiment(experiment_name)
     except Exception:
@@ -55,7 +56,7 @@ def register_new_user(
         })
 
         # ── PROV-O document ────────────────────────────────
-        from rationai.mlkit.provenance.prov import build_user_prov  # noqa: PLC0415
+        from rationai.mlkit.provenance.prov import build_user_prov
 
         prov_doc = build_user_prov(
             run_id=run_id,

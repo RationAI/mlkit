@@ -1,35 +1,38 @@
 """rationai.mlkit — ML toolkit with provenance tracking."""
 
+from typing import Any
+
 from rationai.mlkit.autolog import autolog
 from rationai.mlkit.provenance.register_dataset import register_dataset
 from rationai.mlkit.stream import StreamCapture, StreamLogger
 
+
 __all__ = [
-    "StreamCapture",
-    "StreamLogger",
     "AggregatedMetricCollection",
     "Aggregator",
+    "LazyMetricDict",
+    "MLFlowLogger",
     "MaxAggregator",
     "MeanAggregator",
     "MeanPoolMaxAggregator",
-    "TopKAggregator",
-    "NestedMetricCollection",
-    "LazyMetricDict",
-    "StratifiedBatchSampler",
-    "PDMStratifiedBatchSampler",
     "MetaTiledSlides",
-    "OpenSlideTilesDataset",
-    "Trainer",
-    "MLFlowLogger",
     "MultiloaderLifecycle",
+    "NestedMetricCollection",
+    "OpenSlideTilesDataset",
+    "PDMStratifiedBatchSampler",
     "ProvenanceCallback",
+    "StratifiedBatchSampler",
+    "StreamCapture",
+    "StreamLogger",
+    "TopKAggregator",
+    "Trainer",
     "autolog",
-    "with_cli_args",
     "register_dataset",
+    "with_cli_args",
 ]
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     if name in ("Trainer", "MLFlowLogger", "MultiloaderLifecycle", "with_cli_args"):
         import importlib
         _mod = importlib.import_module("rationai.mlkit.lightning")

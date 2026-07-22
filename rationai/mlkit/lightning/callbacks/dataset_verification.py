@@ -22,6 +22,7 @@ import logging
 import os
 import shutil
 import uuid
+from typing import Any
 
 import mlflow
 from lightning.pytorch.callbacks import Callback
@@ -61,10 +62,10 @@ class DatasetVerificationCallback(Callback):
         self.random_state = random_state
         self.fail_fast = fail_fast
         self._done = False
-        self._verification: dict | None = None
-        self._split_data: dict | None = None
+        self._verification: dict[str, Any] | None = None
+        self._split_data: dict[str, Any] | None = None
 
-    def on_fit_start(self, trainer, pl_module):  # noqa: ARG002
+    def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         if self._done:
             return
         self._done = True
@@ -73,6 +74,8 @@ class DatasetVerificationCallback(Callback):
             _detect_manifest,
             _lookup_dataset_run,
             _verify_dataset,
+        )
+        from rationai.mlkit.provenance.register_dataset import (
             load_manifest as _load_manifest,
         )
 
