@@ -33,10 +33,14 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name in ("Trainer", "MLFlowLogger", "MultiloaderLifecycle", "with_cli_args"):
+    if name in ("Trainer", "MultiloaderLifecycle", "with_cli_args"):
         import importlib
         _mod = importlib.import_module("rationai.mlkit.lightning")
         return getattr(_mod, name)
+
+    if name == "MLFlowLogger":
+        from rationai.mlkit.lightning.loggers.mlflow import MLFlowLogger
+        return MLFlowLogger
 
     if name == "ProvenanceCallback":
         from rationai.mlkit.lightning.callbacks import ProvenanceCallback
