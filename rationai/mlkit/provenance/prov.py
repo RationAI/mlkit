@@ -42,9 +42,12 @@ def get_prov_prefixes(override: dict[str, str] | None = None) -> dict[str, str]:
     env_json = os.environ.get("PROV_BASE_URI", "")
     if env_json:
         try:
-            merged = {**_DEFAULT_PROV_PREFIXES, **json.loads(env_json)}
+            parsed = json.loads(env_json)
+            if not isinstance(parsed, dict):
+                raise TypeError("expected a JSON object")
+            merged = {**_DEFAULT_PROV_PREFIXES, **parsed}
             return merged
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             pass
     return _DEFAULT_PROV_PREFIXES
 
