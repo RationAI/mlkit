@@ -1,9 +1,9 @@
 """Provenance tracking — PROV-O-aware logging to MLflow.
 
 Submodules:
-    provenance        – internal helpers (lookup, verification)
-    register_dataset  – register_dataset (hash-based)
-    register_user     – register_new_user
+    prov              – PROV-O document builders (W3C PROV compatible)
+    register_dataset  – register_dataset (hash-based, emits prov.json)
+    register_user     – register_new_user (emits prov.json)
 
 For automatic provenance capture with Lightning, use
 :class:`~rationai.mlkit.lightning.callbacks.provenance.ProvenanceCallback`.
@@ -21,6 +21,10 @@ if "MLFLOW_TRACKING_URI" not in os.environ:
     os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
 
 # Now safe to import – all child modules will pick up the env var
+from .prov import (  # noqa: E402
+    build_dataset_prov,
+    build_user_prov,
+)
 from .register_dataset import (  # noqa: E402
     register_dataset,
     verify_dataset,
@@ -33,6 +37,9 @@ __all__ = [
     "verify_dataset",
     # User registration
     "register_new_user",
+    # PROV document builders
+    "build_user_prov",
+    "build_dataset_prov",
 ]
 
 

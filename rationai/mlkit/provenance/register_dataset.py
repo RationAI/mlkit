@@ -257,11 +257,34 @@ def register_dataset(
         "file_mtimes": json.dumps(file_mtimes),
     })
 
-    # Save provenance JSON as an artifact for offline verification
+    # ── PROV-O document (W3C PROV-O compatible) ────────────
+    from rationai.mlkit.provenance.prov import build_dataset_prov  # noqa: PLC0415
+
+    prov_doc = build_dataset_prov(
+        run_id=run_id,
+        dataset_name=dataset_name,
+        version=version,
+        dataset_root=dataset_dir,
+        num_samples=len(samples),
+        num_positive=sum(1 for s in samples if s["label"] == 1),
+        num_negative=sum(1 for s in samples if s["label"] == 0),
+        file_sizes=file_sizes,
+        manifest_path=manifest_path,
+    )
+
     prov_dir = f"_dataset_prov_{uuid.uuid4().hex[:8]}"
     os.makedirs(prov_dir, exist_ok=True)
-    prov_path = os.path.join(prov_dir, "dataset_provenance.json")
+    prov_path = os.path.join(prov_dir, "prov.json")
     with open(prov_path, "w") as f:
+        json.dump(prov_doc, f, indent=2)
+    mlflow.log_artifact(prov_path, artifact_path="provenance")
+    shutil.rmtree(prov_dir, ignore_errors=True)
+
+    # ── Legacy dataset provenance JSON (kept for backward compat) ──
+    legacy_prov_dir = f"_dataset_legacy_{uuid.uuid4().hex[:8]}"
+    os.makedirs(legacy_prov_dir, exist_ok=True)
+    legacy_path = os.path.join(legacy_prov_dir, "dataset_provenance.json")
+    with open(legacy_path, "w") as f:
         json.dump({
             "dataset_name": dataset_name,
             "version": version,
@@ -270,8 +293,8 @@ def register_dataset(
             "file_mtimes": file_mtimes,
             "num_samples": len(samples),
         }, f, indent=2)
-    mlflow.log_artifact(prov_path, artifact_path="provenance")
-    shutil.rmtree(prov_dir, ignore_errors=True)
+    mlflow.log_artifact(legacy_path, artifact_path="provenance")
+    shutil.rmtree(legacy_prov_dir, ignore_errors=True)
 
     mlflow.end_run()
     print(f"  [register_dataset] {dataset_name} v{version} → run_id={run_id}")
