@@ -19,7 +19,7 @@ def _lookup_experiment(name):
     return exp.experiment_id if exp else None
 
 
-def _lookup_dataset_run(manifest_path: str | None = None) -> str | None:
+def _lookup_dataset_run() -> str | None:
     """Return the latest Dataset_Registry run ID.
 
     Falls back to the most recent run so that workflows with only one
@@ -54,6 +54,23 @@ def _detect_manifest() -> tuple[str | None, str | None]:
                     )),
                 )
     return None, None
+
+
+def load_manifest(manifest_path: str, data_root: str) -> list[dict]:
+    """Load a manifest.csv and resolve WSI paths.
+
+    Returns a list of dicts with keys ``path`` (absolute) and ``label``.
+
+    Shared by ``register_dataset``, ``_verify_dataset``, and
+    ``ProvenanceCallback`` to avoid duplicating the CSV iteration pattern.
+    """
+    df = pd.read_csv(manifest_path)
+    samples: list[dict] = []
+    for _, row in df.iterrows():
+        rel = row["wsi_path"]
+        full = os.path.join(data_root, rel) if not os.path.isabs(rel) else rel
+        samples.append({"path": full, "label": int(row["cancer"])})
+    return samples
 
 
 def verify_dataset(
@@ -125,17 +142,12 @@ def _verify_dataset(
         result["details"].append(f"Failed to fetch Dataset_Registry run: {e}")
         return result
 
-    # Read manifest and check current file sizes
-    df = pd.read_csv(manifest_path)
-    samples = []
+    samples = load_manifest(manifest_path, data_root)
     curr_file_sizes = {}
-    for _, row in df.iterrows():
-        rel = row["wsi_path"]
-        full = os.path.join(data_root, rel) if not os.path.isabs(rel) else rel
-        samples.append({"path": full, "label": int(row["cancer"])})
-        basename = os.path.basename(full)
-        if os.path.isfile(full):
-            curr_file_sizes[basename] = os.stat(full).st_size
+    for s in samples:
+        basename = os.path.basename(s["path"])
+        if os.path.isfile(s["path"]):
+            curr_file_sizes[basename] = os.stat(s["path"]).st_size
         else:
             curr_file_sizes[basename] = -1  # missing
 
@@ -212,20 +224,14 @@ def register_dataset(
     if dataset_name is None:
         dataset_name = os.path.basename(dataset_dir)
 
-    # Read manifest and collect per-file metadata (size, last_modified)
-    df = pd.read_csv(manifest_path)
-    samples = []
+    samples = load_manifest(manifest_path, dataset_dir)
     file_sizes = {}
     file_mtimes = {}
 
-    for _, row in df.iterrows():
-        rel = row["wsi_path"]
-        full = os.path.join(dataset_dir, rel) if not os.path.isabs(rel) else rel
-        samples.append({"path": full, "label": int(row["cancer"])})
-
-        basename = os.path.basename(full)
-        if os.path.isfile(full):
-            st = os.stat(full)
+    for s in samples:
+        basename = os.path.basename(s["path"])
+        if os.path.isfile(s["path"]):
+            st = os.stat(s["path"])
             file_sizes[basename] = st.st_size
             file_mtimes[basename] = st.st_mtime
         else:
@@ -272,58 +278,4 @@ def register_dataset(
     return run_id
 
 
-# ── Legacy CSV-based registration (backward compat) ─────────────────────
 
-def register_dataset_as_provenance(manifest_path, dataset_root, dataset_name, version):
-    """Legacy CSV-based dataset registration.
-
-    Stores an enriched manifest as an artifact with a ``manifest_uri`` tag.
-    Does NOT set ``manifest_hash`` / ``samples_hash`` tags — use
-    :func:`register_dataset` instead for hash-based verification support.
-    """
-    mlflow.set_experiment("Dataset_Registry")
-
-    with mlflow.start_run(run_name=f"Dataset_{dataset_name}_v{version}") as run:
-        # 1. Indexace v MLflow (pro rychlé hledání/filtrování)
-        mlflow.set_tag("dataset_name", dataset_name)
-        mlflow.set_tag("version", version)
-
-        # 2. Metadata pro tracking
-        mlflow.log_param("dataset_root", dataset_root)
-
-        # 3. Zpracování manifestu a obohacení o metadata (size, mtime)
-        df = pd.read_csv(manifest_path)
-        metadata_list = []
-
-        for path in df["wsi_path"]:
-            full_path = os.path.join(dataset_root, path) if not os.path.isabs(path) else path
-            if os.path.exists(full_path):
-                stat = os.stat(full_path)
-                metadata_list.append({"file_size": stat.st_size, "last_modified": stat.st_mtime})
-            else:
-                metadata_list.append({"file_size": -1, "last_modified": -1})
-
-        df_enriched = pd.concat([df, pd.DataFrame(metadata_list)], axis=1)
-
-        # 4. Uložení artefaktu (Zlatý zdroj pravdy)
-        provenance_file = "dataset_provenance.csv"
-        df_enriched.to_csv(provenance_file, index=False)
-        mlflow.log_artifact(provenance_file, artifact_path="provenance")
-
-        # 5. Uložení odkazu do tagu (velmi důležité pro automatizaci!)
-        mlflow.set_tag("manifest_uri", f"runs:/{run.info.run_id}/provenance/{provenance_file}")
-
-        print(f"Dataset '{dataset_name}' (v{version}) úspěšně zaregistrován.")
-        print(f"Run ID: {run.info.run_id}")
-
-        os.remove(provenance_file)
-
-
-if __name__ == "__main__":
-    # Příklad použití pro tvůj dataset
-    register_dataset_as_provenance(
-        manifest_path="data/dummy_dataset_1/manifest.csv",
-        dataset_root="data/dummy_dataset_1",
-        dataset_name="pato_cohort_01",
-        version="1.0.0"
-    )

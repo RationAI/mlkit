@@ -2,8 +2,7 @@
 
 Submodules:
     provenance        – internal helpers (lookup, verification)
-    register_dataset  – register_dataset (hash-based) and
-                        register_dataset_as_provenance (legacy CSV-based)
+    register_dataset  – register_dataset (hash-based)
     register_user     – register_new_user
 
 For automatic provenance capture with Lightning, use
@@ -24,7 +23,6 @@ if "MLFLOW_TRACKING_URI" not in os.environ:
 # Now safe to import – all child modules will pick up the env var
 from .register_dataset import (  # noqa: E402
     register_dataset,
-    register_dataset_as_provenance,
     verify_dataset,
 )
 from .register_user import register_new_user  # noqa: E402
@@ -32,7 +30,6 @@ from .register_user import register_new_user  # noqa: E402
 __all__ = [
     # Dataset
     "register_dataset",
-    "register_dataset_as_provenance",
     "verify_dataset",
     # User registration
     "register_new_user",
