@@ -8,20 +8,12 @@ Submodules:
 
 For automatic provenance capture with Lightning, use
 :class:`~rationai.mlkit.lightning.callbacks.provenance.ProvenanceCallback`.
-
-MLflow tracking URI defaults to ``http://localhost:5000``.  Override with
-the ``MLFLOW_TRACKING_URI`` environment variable.
 """
 
 from __future__ import annotations
 
 import os
 from typing import Any
-
-
-# ── Set default tracking URI before any mlflow import runs ───────────
-if "MLFLOW_TRACKING_URI" not in os.environ:
-    os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
 
 from rationai.mlkit.provenance.dataset import (
     build_dataset_prov,
