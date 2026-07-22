@@ -1,7 +1,8 @@
 """rationai.mlkit — ML toolkit with provenance tracking."""
 
-from rationai.mlkit.stream import StreamCapture, StreamLogger
+from rationai.mlkit.autolog import autolog
 from rationai.mlkit.provenance.register_dataset import register_dataset
+from rationai.mlkit.stream import StreamCapture, StreamLogger
 
 __all__ = [
     "StreamCapture",
@@ -29,7 +30,7 @@ __all__ = [
 
 
 def __getattr__(name):
-    if name in ("Trainer", "MLFlowLogger", "MultiloaderLifecycle", "autolog", "with_cli_args"):
+    if name in ("Trainer", "MLFlowLogger", "MultiloaderLifecycle", "with_cli_args"):
         import importlib
         _mod = importlib.import_module("rationai.mlkit.lightning")
         return getattr(_mod, name)

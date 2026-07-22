@@ -59,18 +59,9 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def experiment(self) -> MlflowClient:
         if not self._initialized:
             exp = super().experiment
-            # Establish a fluent-API active run context so that callbacks
-            # using ``mlflow.log_artifact``, ``mlflow.log_params``, etc.
-            # work correctly.  We push an ActiveRun onto the thread-local
-            # stack directly rather than calling ``mlflow.start_run()`` which
-            # would re-resolve the experiment name and potentially create a
-            # new run in the wrong experiment (prior calls like
-            # register_dataset may have clobbered global fluent state).
-            client = mlflow.tracking.MlflowClient()
-            run_info = client.get_run(self.run_id)
-            active = mlflow.tracking.fluent.ActiveRun(run_info)
-            stack = mlflow.tracking.fluent._active_run_stack.get()
-            stack.append(active)
+            # Resume the run in the fluent API context so callbacks can use
+            # mlflow.log_params, mlflow.log_artifacts, etc.
+            mlflow.start_run(self.run_id, log_system_metrics=self.log_system_metrics)
             self._initialized = True
             return exp
 
