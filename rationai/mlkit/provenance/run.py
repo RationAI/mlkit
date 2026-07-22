@@ -307,7 +307,11 @@ def build_training_run_prov(
 
     if verification:
         meta_entity["gen:dataset_verified"] = [str(verification.get("verified", False))]
-        meta_entity["gen:dataset_run_id"] = [str(verification["dataset_run_id"]) if verification.get("dataset_run_id") is not None else ""]
+        meta_entity["gen:dataset_run_id"] = [
+            str(verification["dataset_run_id"])
+            if verification.get("dataset_run_id") is not None
+            else ""
+        ]
         fsm = verification.get("file_sizes_match")
         if fsm is not None:
             meta_entity["gen:file_sizes_match"] = [str(fsm)]
