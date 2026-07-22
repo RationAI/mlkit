@@ -28,24 +28,30 @@ def register_new_user(
         The MLflow run_id of the registration run.
     """
     experiment_name = "User_Registry"
-    experiment = mlflow.get_experiment_by_name(experiment_name)
-
-    if not experiment:
-        mlflow.create_experiment(experiment_name)
+    try:
+        experiment_id = mlflow.create_experiment(experiment_name)
+    except Exception:
+        # Already exists (possibly created concurrently)
+        exp = mlflow.get_experiment_by_name(experiment_name)
+        experiment_id = exp.experiment_id if exp else None
 
     with mlflow.start_run(
-        experiment_id=mlflow.get_experiment_by_name(experiment_name).experiment_id,
+        experiment_id=experiment_id,
         run_name=f"User_{username}",
     ) as run:
         run_id = run.info.run_id
 
-        mlflow.set_tags({
+        mlflow.log_params({
             "username": username,
             "real_name": real_name,
             "email": email,
             "organization": organization,
             "lead_name": lead_name,
             "lead_email": lead_email,
+        })
+        mlflow.set_tags({
+            "username": username,
+            "organization": organization,
         })
 
         # ── PROV-O document ────────────────────────────────
@@ -70,16 +76,16 @@ def register_new_user(
         mlflow.log_artifact(prov_path, artifact_path="provenance")
         shutil.rmtree(prov_dir, ignore_errors=True)
 
-    print(f"  [register_new_user] {real_name} ({username}) → run_id={run_id}")
+    print(f"  [register_new_user] {username} → run_id={run_id}")
     return run_id
 
 
 if __name__ == "__main__":
     register_new_user(
-        username="jiribuchta",
-        real_name="Jiří Buchta",
-        email="524981@mail.muni.cz",
-        organization="RationAI",
-        lead_name="Tomáš Brázdil",
-        lead_email="brazdil@muni.cz",
+        username="researcher_01",
+        real_name="Jane Doe",
+        email="jane.doe@example.com",
+        organization="Example Org",
+        lead_name="John Smith",
+        lead_email="john.smith@example.com",
     )

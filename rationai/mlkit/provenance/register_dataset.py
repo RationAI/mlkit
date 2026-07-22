@@ -242,61 +242,69 @@ def register_dataset(
     mlflow.set_experiment(experiment_name)
     run = mlflow.start_run(run_name=f"Dataset_{dataset_name}_{version}")
     run_id = run.info.run_id
+    run_active = True
 
-    mlflow.log_params({
-        "dataset_root": dataset_dir,
-        "num_samples": len(samples),
-        "num_positive": sum(1 for s in samples if s["label"] == 1),
-        "num_negative": sum(1 for s in samples if s["label"] == 0),
-    })
+    try:
+        mlflow.log_params({
+            "dataset_root": dataset_dir,
+            "num_samples": len(samples),
+            "num_positive": sum(1 for s in samples if s["label"] == 1),
+            "num_negative": sum(1 for s in samples if s["label"] == 0),
+        })
 
-    mlflow.set_tags({
-        "dataset_name": dataset_name,
-        "version": version,
-        "file_sizes": json.dumps(file_sizes),
-        "file_mtimes": json.dumps(file_mtimes),
-    })
-
-    # ── PROV-O document (W3C PROV-O compatible) ────────────
-    from rationai.mlkit.provenance.prov import build_dataset_prov  # noqa: PLC0415
-
-    prov_doc = build_dataset_prov(
-        run_id=run_id,
-        dataset_name=dataset_name,
-        version=version,
-        dataset_root=dataset_dir,
-        num_samples=len(samples),
-        num_positive=sum(1 for s in samples if s["label"] == 1),
-        num_negative=sum(1 for s in samples if s["label"] == 0),
-        file_sizes=file_sizes,
-        manifest_path=manifest_path,
-    )
-
-    prov_dir = f"_dataset_prov_{uuid.uuid4().hex[:8]}"
-    os.makedirs(prov_dir, exist_ok=True)
-    prov_path = os.path.join(prov_dir, "prov.json")
-    with open(prov_path, "w") as f:
-        json.dump(prov_doc, f, indent=2)
-    mlflow.log_artifact(prov_path, artifact_path="provenance")
-    shutil.rmtree(prov_dir, ignore_errors=True)
-
-    # ── Legacy dataset provenance JSON (kept for backward compat) ──
-    legacy_prov_dir = f"_dataset_legacy_{uuid.uuid4().hex[:8]}"
-    os.makedirs(legacy_prov_dir, exist_ok=True)
-    legacy_path = os.path.join(legacy_prov_dir, "dataset_provenance.json")
-    with open(legacy_path, "w") as f:
-        json.dump({
+        mlflow.set_tags({
             "dataset_name": dataset_name,
             "version": version,
-            "dataset_root": dataset_dir,
-            "file_sizes": file_sizes,
-            "file_mtimes": file_mtimes,
-            "num_samples": len(samples),
-        }, f, indent=2)
-    mlflow.log_artifact(legacy_path, artifact_path="provenance")
-    shutil.rmtree(legacy_prov_dir, ignore_errors=True)
+            "file_sizes": json.dumps(file_sizes),
+            "file_mtimes": json.dumps(file_mtimes),
+        })
 
-    mlflow.end_run()
+        # ── PROV-O document (W3C PROV-O compatible) ────────────
+        from rationai.mlkit.provenance.prov import build_dataset_prov  # noqa: PLC0415
+
+        prov_doc = build_dataset_prov(
+            run_id=run_id,
+            dataset_name=dataset_name,
+            version=version,
+            dataset_root=dataset_dir,
+            num_samples=len(samples),
+            num_positive=sum(1 for s in samples if s["label"] == 1),
+            num_negative=sum(1 for s in samples if s["label"] == 0),
+            file_sizes=file_sizes,
+            manifest_path=manifest_path,
+        )
+
+        prov_dir = f"_dataset_prov_{uuid.uuid4().hex[:8]}"
+        os.makedirs(prov_dir, exist_ok=True)
+        prov_path = os.path.join(prov_dir, "prov.json")
+        try:
+            with open(prov_path, "w") as f:
+                json.dump(prov_doc, f, indent=2)
+            mlflow.log_artifact(prov_path, artifact_path="provenance")
+        finally:
+            shutil.rmtree(prov_dir, ignore_errors=True)
+
+        # ── Legacy dataset provenance JSON (kept for backward compat) ──
+        legacy_prov_dir = f"_dataset_legacy_{uuid.uuid4().hex[:8]}"
+        os.makedirs(legacy_prov_dir, exist_ok=True)
+        legacy_path = os.path.join(legacy_prov_dir, "dataset_provenance.json")
+        try:
+            with open(legacy_path, "w") as f:
+                json.dump({
+                    "dataset_name": dataset_name,
+                    "version": version,
+                    "dataset_root": dataset_dir,
+                    "file_sizes": file_sizes,
+                    "file_mtimes": file_mtimes,
+                    "num_samples": len(samples),
+                }, f, indent=2)
+            mlflow.log_artifact(legacy_path, artifact_path="provenance")
+        finally:
+            shutil.rmtree(legacy_prov_dir, ignore_errors=True)
+    finally:
+        if run_active:
+            mlflow.end_run()
+
     print(f"  [register_dataset] {dataset_name} v{version} → run_id={run_id}")
     return run_id
 

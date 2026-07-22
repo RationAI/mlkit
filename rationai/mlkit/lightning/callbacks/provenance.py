@@ -815,7 +815,7 @@ class ProvenanceCallback(Callback):
         # ── Scheduler summary ───────────────────────────────────
         if self.register_scheduler and pl_module is not None:
             try:
-                for sched in trainer.lr_schedulers:
+                for sched in getattr(trainer, "lr_schedulers", []):
                     scheduler_info = _scheduler_summary(sched.get("scheduler"))
                     mlflow.log_params(scheduler_info)
                     break

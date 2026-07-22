@@ -20,7 +20,7 @@ uv sync
 Start the MLflow server:
 
 ```bash
-mlflow ui --host 0.0.0.0 --port 5000    # → http://localhost:5000
+mlflow ui --host 127.0.0.1 --port 5000    # → http://localhost:5000
 ```
 
 ---
@@ -63,12 +63,12 @@ Register a researcher into the `User_Registry` experiment:
 from rationai.mlkit.provenance import register_new_user
 
 register_new_user(
-    username="jiribuchta",
-    real_name="Jiří Buchta",
-    email="524981@mail.muni.cz",
-    organization="RationAI",
-    lead_name="Tomáš Brázdil",
-    lead_email="brazdil@muni.cz",
+    username="researcher_01",
+    real_name="Jane Doe",
+    email="jane.doe@example.com",
+    organization="Example Org",
+    lead_name="John Smith",
+    lead_email="john.smith@example.com",
 )
 ```
 
@@ -101,7 +101,10 @@ print(result["verified"])  # True if all files match
 Full auto-capture for Hydra-based training runs:
 
 ```python
+import hydra
+from omegaconf import DictConfig
 from rationai.mlkit import Trainer, autolog
+from rationai.mlkit.lightning.loggers.mlflow import MLFlowLogger
 from rationai.mlkit.lightning.callbacks import ProvenanceCallback
 
 @hydra.main(config_path=".", config_name="train_cfg", version_base=None)
@@ -304,7 +307,7 @@ dataset = MetaTiledSlides(
 
 ## Project structure
 
-```
+```text
 .
 ├── example_provenance_setup.py        # Setup: register users & dataset
 ├── example_provenance_train.py        # Training with @autolog + ProvenanceCallback
@@ -368,7 +371,7 @@ PROV graph reconstruction machine-readable.
 
 Each training run emits a self-contained OpenProvenance JSON document at
 `provenance/prov.json` (MLflow artifact). This document is compatible with
-the [prov_mlflow](https://github.com/jiribuchta/prov_mlflow) Java tool and
+the `prov_mlflow` Java tool and
 follows the W3C PROV-O standard.
 
 ### Structure
@@ -398,7 +401,7 @@ with 10 namespace prefixes and 7 sections:
 
 ### Compatibility
 
-The generated document matches the Java [`prov_mlflow`](https://github.com/jiribuchta/prov_mlflow)
+The generated document matches the Java `prov_mlflow`
 output format:
 
 - Bundle-wrapped JSON structure

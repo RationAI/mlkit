@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime, timezone
+import datetime as _dt
 from typing import Any
 
 
@@ -62,19 +62,19 @@ def _qualified(prefix: str, local: str) -> str:
     return f"{prefix}:{local}"
 
 
-def _typed_value(value: Any, type_prefix: str = "xsd", type_local: str = "string") -> list[str]:
+def _typed_value(value: Any) -> list[str]:
     return [str(value)]
 
 
-def _qualified_name(type_prefix: str, type_local: str) -> dict:
+def _qualified_name(type_prefix: str, type_local: str) -> dict[str, str]:
     return {"type": "prov:QUALIFIED_NAME", "$": f"{type_prefix}:{type_local}"}
 
 
 def _iso_timestamp(ts_ms: int | None = None) -> str:
     if ts_ms is not None:
-        dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+        dt = _dt.datetime.fromtimestamp(ts_ms / 1000, tz=_dt.UTC)
     else:
-        dt = datetime.now(timezone.utc)
+        dt = _dt.datetime.now(_dt.UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.000+00:00")
 
 
@@ -91,7 +91,7 @@ def build_user_prov(
     lead_name: str | None = None,
     lead_email: str | None = None,
     prov_prefixes: dict[str, str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Build a PROV document for a user registration run.
 
     Produces an ``agent`` entity representing the researcher and links it
@@ -111,11 +111,11 @@ def build_user_prov(
     main_act_local = f"UserReg_{run_id[:8]}"
     main_act_id = _qualified("blank", main_act_local)
 
-    entities: dict[str, dict] = {}
-    activities: dict[str, dict] = {}
-    agents: dict[str, dict] = {}
-    was_associated_with: dict[str, dict] = {}
-    was_generated_by: dict[str, dict] = {}
+    entities: dict[str, dict[str, Any]] = {}
+    activities: dict[str, dict[str, Any]] = {}
+    agents: dict[str, dict[str, list[Any]]] = {}
+    was_associated_with: dict[str, dict[str, str]] = {}
+    was_generated_by: dict[str, dict[str, str]] = {}
 
     rel_counter = [0]
     def _blank_rel_id() -> str:
@@ -126,7 +126,7 @@ def build_user_prov(
     now = _iso_timestamp()
 
     # ── AGENT ──────────────────────────────────────────────
-    agent_props: dict[str, list] = {}
+    agent_props: dict[str, list[Any]] = {}
     agent_props["schema:name"] = _typed_value(real_name)
     agent_props["schema:email"] = _typed_value(email)
     if organization:
@@ -135,7 +135,7 @@ def build_user_prov(
     agents[agent_id] = agent_props
 
     # ── ACTIVITY (the registration action) ────────────────
-    run_activity: dict[str, object] = {}
+    run_activity: dict[str, Any] = {}
     run_activity["prov:type"] = [_qualified_name("schema", "Action")]
     run_activity["prov:startTime"] = [now]
     run_activity["prov:endTime"] = [now]
@@ -143,7 +143,7 @@ def build_user_prov(
     activities[run_act_id] = run_activity
 
     # ── CPM METADATA ENTITY ───────────────────────────────
-    meta_entity: dict[str, list] = {}
+    meta_entity: dict[str, list[Any]] = {}
     meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
     meta_entity["gen:username"] = _typed_value(username)
     meta_entity["gen:real_name"] = _typed_value(real_name)
@@ -157,7 +157,7 @@ def build_user_prov(
     entities[meta_id] = meta_entity
 
     # ── CPM MAIN ACTIVITY ────────────────────────────────
-    main_activity: dict[str, object] = {}
+    main_activity: dict[str, Any] = {}
     main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
         {"type": "prov:QUALIFIED_NAME", "$": meta_id}
@@ -178,7 +178,7 @@ def build_user_prov(
     }
 
     # ── ASSEMBLE BUNDLE ───────────────────────────────────
-    inner: dict[str, object] = {"prefix": prefixes}
+    inner: dict[str, Any] = {"prefix": prefixes}
     if entities:
         inner["entity"] = entities
     if activities:
@@ -205,7 +205,7 @@ def build_dataset_prov(
     file_sizes: dict[str, int],
     manifest_path: str | None = None,
     prov_prefixes: dict[str, str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Build a PROV document for a dataset registration run.
 
     Produces a ``dataset`` entity (``sosa:Sample``) linked to the
@@ -225,10 +225,10 @@ def build_dataset_prov(
     main_act_local = f"DatasetReg_{run_id[:8]}"
     main_act_id = _qualified("blank", main_act_local)
 
-    entities: dict[str, dict] = {}
-    activities: dict[str, dict] = {}
-    used: dict[str, dict] = {}
-    was_generated_by: dict[str, dict] = {}
+    entities: dict[str, dict[str, Any]] = {}
+    activities: dict[str, dict[str, Any]] = {}
+    used: dict[str, dict[str, Any]] = {}
+    was_generated_by: dict[str, dict[str, Any]] = {}
 
     rel_counter = [0]
     def _blank_rel_id() -> str:
@@ -239,7 +239,7 @@ def build_dataset_prov(
     now = _iso_timestamp()
 
     # ── DATASET ENTITY ───────────────────────────────────
-    ds_props: dict[str, list] = {
+    ds_props: dict[str, list[Any]] = {
         "schema:name": _typed_value(dataset_name),
         "prov:type": [_qualified_name("sosa", "Sample")],
         "dct:description": _typed_value(
@@ -251,7 +251,7 @@ def build_dataset_prov(
     entities[ds_id] = ds_props
 
     # ── ACTIVITY (the registration action) ────────────────
-    run_activity: dict[str, object] = {}
+    run_activity: dict[str, Any] = {}
     run_activity["prov:type"] = [_qualified_name("schema", "Action")]
     run_activity["prov:startTime"] = [now]
     run_activity["prov:endTime"] = [now]
@@ -267,7 +267,7 @@ def build_dataset_prov(
     }
 
     # ── CPM METADATA ENTITY ───────────────────────────────
-    meta_entity: dict[str, list] = {}
+    meta_entity: dict[str, list[Any]] = {}
     meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
     meta_entity["gen:dataset_name"] = _typed_value(dataset_name)
     meta_entity["gen:dataset_version"] = _typed_value(version)
@@ -285,7 +285,7 @@ def build_dataset_prov(
     entities[meta_id] = meta_entity
 
     # ── CPM MAIN ACTIVITY ────────────────────────────────
-    main_activity: dict[str, object] = {}
+    main_activity: dict[str, Any] = {}
     main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
         {"type": "prov:QUALIFIED_NAME", "$": meta_id}
@@ -302,7 +302,7 @@ def build_dataset_prov(
     }
 
     # ── ASSEMBLE BUNDLE ───────────────────────────────────
-    inner: dict[str, object] = {"prefix": prefixes}
+    inner: dict[str, Any] = {"prefix": prefixes}
     if entities:
         inner["entity"] = entities
     if activities:

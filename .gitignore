@@ -174,4 +174,4 @@ cython_debug/
 test_data
 mlflow.db
 mlartifacts
-example*
+/example*
