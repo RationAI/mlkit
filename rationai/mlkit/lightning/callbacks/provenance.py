@@ -123,8 +123,6 @@ def _scheduler_summary(scheduler: Any) -> dict[str, str | float]:
     return info
 
 
-
-
 class ProvenanceCallback(Callback):
     """Lightning callback that captures PROV document + run summary.
 

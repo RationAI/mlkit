@@ -300,9 +300,7 @@ def build_training_run_prov(
                 json.dumps(split_data["train"])
             )
         if split_data.get("test"):
-            meta_entity["gen:split_test"] = _typed_value(
-                json.dumps(split_data["test"])
-            )
+            meta_entity["gen:split_test"] = _typed_value(json.dumps(split_data["test"]))
 
     if requirements:
         meta_entity["gen:requirements"] = [requirements]
