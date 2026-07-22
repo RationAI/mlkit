@@ -608,7 +608,7 @@ class ProvenanceCallback(Callback):
 
         if manifest_path and data_root:
             from rationai.mlkit.provenance.register_dataset import (
-                _load_manifest,
+                load_manifest,
             )
             from sklearn.model_selection import train_test_split
 
@@ -619,7 +619,7 @@ class ProvenanceCallback(Callback):
             for detail in self._verification.get("details", []):
                 log.info(f"  [ProvenanceCallback] {detail}")
 
-            samples = _load_manifest(manifest_path, data_root)
+            samples = load_manifest(manifest_path, data_root)
             train_samples, test_samples = train_test_split(
                 samples,
                 test_size=self.test_size,
@@ -732,6 +732,11 @@ class ProvenanceCallback(Callback):
 
     def on_fit_start(self, trainer, pl_module):  # noqa: ARG002
         """Gather environment/verification data from siblings or fall back."""
+        from rationai.mlkit.lightning.callbacks.dataset_verification import (
+            DatasetVerificationCallback,
+        )
+        from rationai.mlkit.lightning.callbacks.environment import EnvironmentCallback
+
         # Check if sibling callbacks are present
         has_env = any(
             isinstance(cb, EnvironmentCallback)
