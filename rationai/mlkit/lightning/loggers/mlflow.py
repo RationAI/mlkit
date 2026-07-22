@@ -59,19 +59,18 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def experiment(self) -> MlflowClient:
         if not self._initialized:
             exp = super().experiment
-            # Resume the run created in __init__.
-            # We avoid ``mlflow.start_run`` here because its global fluent-API
-            # experiment state may have been clobbered by prior calls
-            # (register_dataset, register_new_user) that created runs in
-            # different experiments.  Instead we set the run status directly
-            # via the client API.
+            # Establish a fluent-API active run context so that callbacks
+            # using ``mlflow.log_artifact``, ``mlflow.log_params``, etc.
+            # work correctly.  We push an ActiveRun onto the thread-local
+            # stack directly rather than calling ``mlflow.start_run()`` which
+            # would re-resolve the experiment name and potentially create a
+            # new run in the wrong experiment (prior calls like
+            # register_dataset may have clobbered global fluent state).
             client = mlflow.tracking.MlflowClient()
-            client.set_terminated_status(
-                self.run_id,
-                "RUNNING",
-                int(__import__("time").time() * 1000),
-            )
-            self._active_run_id = self.run_id
+            run_info = client.get_run(self.run_id)
+            active = mlflow.tracking.fluent.ActiveRun(run_info)
+            stack = mlflow.tracking.fluent._active_run_stack.get()
+            stack.append(active)
             self._initialized = True
             return exp
 

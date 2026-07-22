@@ -730,12 +730,37 @@ class ProvenanceCallback(Callback):
 
     # ── lightning hooks ───────────────────────────────────────
 
+    def _ensure_active_run(self, trainer) -> str | None:
+        """Ensure MLflow has an active run by triggering the logger's experiment.
+
+        Returns the run_id if successful, or None if no MLFlowLogger is present.
+        """
+        try:
+            from rationai.mlkit.lightning.loggers.mlflow import MLFlowLogger
+        except ImportError:
+            # Standalone mlflow — rely on whatever active_run exists
+            run = mlflow.active_run()
+            return run.info.run_id if run else None
+
+        for logger in trainer.loggers:
+            if isinstance(logger, MLFlowLogger):
+                # Access .experiment to trigger lazy init + active-run setup
+                _ = logger.experiment
+                self._run_id = logger.run_id
+                return logger.run_id
+
+        run = mlflow.active_run()
+        return run.info.run_id if run else None
+
     def on_fit_start(self, trainer, pl_module):  # noqa: ARG002
         """Gather environment/verification data from siblings or fall back."""
         from rationai.mlkit.lightning.callbacks.dataset_verification import (
             DatasetVerificationCallback,
         )
         from rationai.mlkit.lightning.callbacks.environment import EnvironmentCallback
+
+        # Ensure the MLFlowLogger has an active run before any fluent API calls
+        self._ensure_active_run(trainer)
 
         # Check if sibling callbacks are present
         has_env = any(
@@ -757,7 +782,12 @@ class ProvenanceCallback(Callback):
         """Log model/optimizer/scheduler summaries and PROV document."""
         active_run = mlflow.active_run()
         if not active_run:
-            return
+            # Fallback: try to get run_id from the logger directly
+            self._ensure_active_run(trainer)
+            if self._run_id:
+                active_run = mlflow.tracking.MlflowClient().get_run(self._run_id)
+            else:
+                return
         run_id = active_run.info.run_id
 
         # ── Model summary ───────────────────────────────────────
