@@ -208,12 +208,14 @@ def register_new_user(
 
         prov_dir = f"_user_prov_{uuid.uuid4().hex[:8]}"
         os.makedirs(prov_dir, exist_ok=True)
-        prov_path = os.path.join(prov_dir, "prov.json")
-        with open(prov_path, "w") as f:
-            json.dump(prov_doc, f, indent=2)
+        try:
+            prov_path = os.path.join(prov_dir, "prov.json")
+            with open(prov_path, "w") as f:
+                json.dump(prov_doc, f, indent=2)
 
-        mlflow.log_artifact(prov_path, artifact_path="provenance")
-        shutil.rmtree(prov_dir, ignore_errors=True)
+            mlflow.log_artifact(prov_path, artifact_path="provenance")
+        finally:
+            shutil.rmtree(prov_dir, ignore_errors=True)
 
     print(f"  [register_new_user] {username} → run_id={run_id}")
     return run_id
