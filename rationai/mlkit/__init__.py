@@ -3,7 +3,7 @@
 from typing import Any
 
 from rationai.mlkit.autolog import autolog
-from rationai.mlkit.provenance.register_dataset import register_dataset
+from rationai.mlkit.provenance.dataset import register_dataset
 from rationai.mlkit.stream import StreamCapture, StreamLogger
 
 

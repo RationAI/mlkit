@@ -84,12 +84,12 @@ class DatasetVerificationCallback(Callback):
             return
         self._done = True
 
-        from rationai.mlkit.provenance.register_dataset import (
+        from rationai.mlkit.provenance.dataset import (
             _detect_manifest,
             _lookup_dataset_run,
             _verify_dataset,
         )
-        from rationai.mlkit.provenance.register_dataset import (
+        from rationai.mlkit.provenance.dataset import (
             load_manifest as _load_manifest,
         )
 

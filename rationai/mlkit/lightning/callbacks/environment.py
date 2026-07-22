@@ -42,7 +42,7 @@ log = logging.getLogger(__name__)
 
 def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
     """Find the user run from User_Registry.  Auto-detect username."""
-    from rationai.mlkit.provenance.register_dataset import _lookup_experiment
+    from rationai.mlkit.provenance.dataset import _lookup_experiment
 
     username = os.environ.get("MLFLOW_USER")
     if not username:
@@ -299,7 +299,7 @@ class EnvironmentCallback(Callback):
                 if key in self._user_tags:
                     env_tags[key] = self._user_tags[key]
 
-        from rationai.mlkit.provenance.register_dataset import _lookup_dataset_run
+        from rationai.mlkit.provenance.dataset import _lookup_dataset_run
 
         dataset_run_id = _lookup_dataset_run()
         if dataset_run_id:

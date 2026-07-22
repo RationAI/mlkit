@@ -1,9 +1,10 @@
 """Provenance tracking - PROV-O-aware logging to MLflow.
 
 Submodules:
-    prov              - PROV-O document builders (W3C PROV compatible)
-    register_dataset  - register_dataset (hash-based, emits prov.json)
-    register_user     - register_new_user (emits prov.json)
+    common          - shared helpers (prefixes, IDs, timestamps)
+    user            - build_user_prov + register_new_user
+    dataset         - build_dataset_prov + register_dataset + verify_dataset
+    run             - build_training_run_prov
 
 For automatic provenance capture with Lightning, use
 :class:`~rationai.mlkit.lightning.callbacks.provenance.ProvenanceCallback`.
@@ -22,20 +23,21 @@ from typing import Any
 if "MLFLOW_TRACKING_URI" not in os.environ:
     os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
 
-# Now safe to import - all child modules will pick up the env var
-from rationai.mlkit.provenance.prov import (
+from rationai.mlkit.provenance.dataset import (
     build_dataset_prov,
-    build_user_prov,
-)
-from rationai.mlkit.provenance.register_dataset import (
     register_dataset,
     verify_dataset,
 )
-from rationai.mlkit.provenance.register_user import register_new_user
+from rationai.mlkit.provenance.run import build_training_run_prov
+from rationai.mlkit.provenance.user import (
+    build_user_prov,
+    register_new_user,
+)
 
 
 __all__ = [
     "build_dataset_prov",
+    "build_training_run_prov",
     "build_user_prov",
     "register_dataset",
     "register_new_user",
