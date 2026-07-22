@@ -70,9 +70,12 @@ def _get_prov_prefixes(override: dict[str, str] | None = None) -> dict[str, str]
     env_json = os.environ.get("PROV_BASE_URI", "")
     if env_json:
         try:
-            merged = {**_DEFAULT_PROV_PREFIXES, **json.loads(env_json)}
+            parsed = json.loads(env_json)
+            if not isinstance(parsed, dict):
+                raise TypeError("expected a JSON object")
+            merged = {**_DEFAULT_PROV_PREFIXES, **parsed}
             return merged
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, TypeError) as e:
             log.warning(f"PROV_BASE_URI is not valid JSON: {e} — using defaults")
     return _DEFAULT_PROV_PREFIXES
 
@@ -602,7 +605,13 @@ class ProvenanceCallback(Callback):
             log.warning("[ProvenanceCallback] Git info failed: %s", e)
 
         # ── User lookup ─────────────────────────────────────────
-        user_run_id, user_tags = _lookup_user_run()
+        try:
+            user_run_id, user_tags = _lookup_user_run()
+        except Exception as e:
+            if self.strict:
+                raise
+            log.warning("[ProvenanceCallback] User lookup failed: %s", e)
+            user_run_id, user_tags = None, {}
 
         # ── Hardware (skip if MLflow system metrics are on) ─────
         sys_metrics_on = any(
@@ -618,6 +627,8 @@ class ProvenanceCallback(Callback):
 
         if manifest_path is None:
             manifest_path, data_root = _detect_manifest()
+        elif data_root is None:
+            data_root = os.path.dirname(os.path.abspath(manifest_path))
 
         if manifest_path and data_root:
             from sklearn.model_selection import train_test_split
