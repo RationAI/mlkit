@@ -5,7 +5,7 @@ with Lightning/Hydra integration and pathology-specific metric layers.
 
 All metadata (user, dataset, hardware, docker, git, environment, model architecture,
 optimizer/scheduler settings, console output) is captured automatically via the
-`@autolog` decorator — the user only writes their training loop.
+`@autolog` decorator and `ProvenanceCallback` — the user only writes their training loop.
 
 ---
 
@@ -27,173 +27,171 @@ mlflow ui --host 0.0.0.0 --port 5000    # → http://localhost:5000
 
 ## Quick start
 
-### 1. Run the demo
+### 1. Register users and dataset (one-time setup)
 
-The easiest way to see everything in action:
-
-```bash
-# Full pipeline — uploads to http://localhost:5000
-python demo.py
-
-# Push to a different MLflow server
-python demo.py --uri http://your-server:5000
-
-# Run unit tests instead
-python demo.py --test
-```
-
-The demo exercises all components:
-
-| Step | Feature | What it shows |
-|---|---|---|
-| 1 | Dummy data creation | `test_data/dummy_dataset_*` with manifests |
-| 2 | **StreamCapture** | ANSI-aware stdout/stderr capture |
-| 3 | **AggregatedMetricCollection** | Tile → slide metric aggregation |
-| 4 | **NestedMetricCollection** | Per-slide multiclass metrics |
-| 5 | **StratifiedBatchSampler** | Balanced class batches |
-| 6 | **Provenance** (`@autolog`) | Full training run with auto-captured provenance |
-| 7 | **Lightning** (Trainer + MLFlowLogger) | Lightning training with full provenance tracking |
-
-Both steps 6 and 7 upload to MLflow with identical provenance depth:
-model params, GPU/CPU info, optimizer config, train/test split stats,
-environment freeze, console logs, and the PROV-O document.
-
-### 2. Create dummy data
-
-Generate test datasets (no shell script needed):
+Before training, register researchers and datasets so provenance can reference them:
 
 ```bash
-# Default: 2 datasets × 50 WSIs each
-python dummy_dataset_create.py
-
-# Custom: 3 datasets with 100 WSIs each
-python dummy_dataset_create.py --datasets 3 --wsis-per-dataset 100
-
-# Add more without deleting existing ones
-python dummy_dataset_create.py -d 1 -w 30 --no-clean
+# Edit example_provenance_setup.py with your own data, then run:
+python example_provenance_setup.py
 ```
 
-This creates the following structure under `data/`:
+This creates runs in the `User_Registry` and `Dataset_Registry` MLflow experiments.
 
-```
-data/
-├── dummy_dataset_1/
-│   ├── manifest.csv          # patient_id, wsi_path (relative), cancer
-│   └── wsis/
-│       ├── PAT_001.tiff
-│       ├── PAT_002.tiff
-│       └── ...
-├── dummy_dataset_2/
-│   ├── manifest.csv
-│   └── wsis/
-│       └── ...
-```
+### 2. Run a training experiment
 
-**Options:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--datasets N` / `-d` | `2` | Number of dataset folders |
-| `--wsis-per-dataset N` / `-w` | `50` | WSIs per dataset |
-| `--data-dir DIR` | `data/` | Parent directory |
-| `--seed N` | `42` | Reproducibility seed |
-| `--no-clean` | off | Keep existing datasets, append new ones |
-| `--img-size N` | `128` | Pixel size of dummy TIFF images |
-
-### 3. Register a user
-
-Edit the variables in `user_to_mlflow.py` and run:
+Use `@autolog` + `ProvenanceCallback` in a Hydra-based training script:
 
 ```bash
-python user_to_mlflow.py
+python example_provenance_train.py
 ```
 
-This creates a run in the **User_Registry** experiment with your identity tags.
+Check the MLflow UI at http://localhost:5000 to see the full provenance graph.
 
-### 4. Run a training experiment
-
-Use the `@autolog` decorator from `rationai.mlkit.provenance` in your training script, then:
-
-```bash
-python your_experiment.py
-```
-
-See the [API reference](#provenance--autolog-decorator) below for details.
+See [example_provenance_setup.py](example_provenance_setup.py) and
+[example_provenance_train.py](example_provenance_train.py) for complete working examples.
 
 ---
 
 ## API reference
 
-### Provenance — `@autolog` decorator
+### User registration
 
-Full auto-capture for plain PyTorch training runs:
+Register a researcher into the `User_Registry` experiment:
 
 ```python
-from rationai.mlkit.provenance import autolog
+from rationai.mlkit.provenance import register_new_user
 
-@autolog(model_name="my_model_v1", experiment_name="My_Experiment")
-def train(run):
-    model = build_model()
-    run.register_model(model)
+register_new_user(
+    username="jiribuchta",
+    real_name="Jiří Buchta",
+    email="524981@mail.muni.cz",
+    organization="RationAI",
+    lead_name="Tomáš Brázdil",
+    lead_email="brazdil@muni.cz",
+)
+```
 
-    optimizer = optim.SGD(model.parameters(), lr=1e-3, momentum=0.9)
-    run.register_optimizer(optimizer)
+### Dataset registration
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
-    run.register_scheduler(scheduler)
+Register a dataset (requires `manifest.csv` in the dataset directory):
 
-    for epoch in range(50):
-        loss = train_epoch(model, loader, optimizer)
-        run.log_metrics({"train_loss": loss}, step=epoch)
+```python
+from rationai.mlkit.provenance import register_dataset
 
-    run.save_model(model)
+run_id = register_dataset(
+    dataset_dir="data/cohorts/pato_01",
+    dataset_name="pato_cohort_01",
+    version="2.0",
+)
+print(f"Registered as {run_id}")
+```
 
-if __name__ == "__main__":
-    train()
+Verify a dataset's file integrity:
+
+```python
+from rationai.mlkit.provenance import verify_dataset
+
+result = verify_dataset(manifest_path="data/cohorts/pato_01/manifest.csv")
+print(result["verified"])  # True if all files match
+```
+
+### Provenance — `@autolog` decorator (Hydra training scripts)
+
+Full auto-capture for Hydra-based training runs:
+
+```python
+from rationai.mlkit import Trainer, autolog
+from rationai.mlkit.lightning.callbacks import ProvenanceCallback
+
+@hydra.main(config_path=".", config_name="train_cfg", version_base=None)
+@autolog
+def main(config: DictConfig, logger: MLFlowLogger) -> None:
+    model = MyLightningModule()
+    data = MyDataModule(batch_size=config.batch_size)
+
+    trainer = Trainer(
+        max_epochs=config.epochs,
+        logger=logger,
+        callbacks=[
+            ProvenanceCallback(model_name="my_model_v1")
+        ],
+    )
+    trainer.fit(model, datamodule=data)
 ```
 
 | Auto-captured | Details |
 |---|---|
-| **User** | Resolved from git config → linked to `User_Registry` run |
-| **Dataset** | Latest `Dataset_Registry` run |
+| **User** | Resolved from `MLFLOW_USER` env → git config → linked to `User_Registry` run |
+| **Dataset** | Latest `Dataset_Registry` run, file sizes verified |
 | **Train/test split** | Manifest auto-discovered, CSVs saved as artifacts |
 | **Model architecture** | Class name, param counts, per-layer summary |
 | **Optimizer** | Type, lr, momentum, weight_decay, … |
 | **Scheduler** | Type, step_size, gamma, milestones, … |
 | **Hardware** | GPU/CPU/RAM/OS/Python version |
-| **Docker** | Container ID, image name + hash |
+| **Docker** | Container ID, image name + hash (if in container) |
 | **Git** | Commit, branch, remote URL |
-| **Environment** | Frozen `requirements.txt` + `pyproject.toml` / `uv.lock` |
+| **Environment** | Frozen `requirements.txt` |
 | **Console output** | stdout/stderr → `logs/console.log` artifact (ANSI-aware) |
 | **PROV document** | OpenProvenance JSON → `provenance/prov.json` artifact |
 
-### Provenance + Lightning
+### Lightning callbacks
 
-Wrap Lightning training in `@autolog` and pass the active run to `MLFlowLogger`:
+#### ProvenanceCallback
+
+Drop-in callback that captures full PROV-O provenance for every training run:
 
 ```python
-import mlflow
-from rationai.mlkit import Trainer, MLFlowLogger
-from rationai.mlkit.provenance import autolog
+from rationai.mlkit.lightning.callbacks import ProvenanceCallback
 
-@autolog(model_name="my_lightning_model", experiment_name="My_Experiment")
-def train(run):
-    model = MyLightningModule()
-    run.register_model(model)
-    run.register_optimizer(model.configure_optimizers())
+callback = ProvenanceCallback(
+    model_name="resnet_v1",
+    experiment_name="Training_Pipeline",
+)
 
-    # Reuse the @autolog run so Lightning logs to the same provenance-tracked run
-    logger = MLFlowLogger(experiment_name="My_Experiment", run_id=mlflow.active_run().info.run_id)
-
-    trainer = Trainer(logger=logger, max_epochs=50)
-    trainer.fit(model, train_loader)
-
-    run.save_model(model)
+trainer = Trainer(callbacks=[callback], ...)
 ```
 
-This gives you the same full provenance depth as plain PyTorch — GPU info,
-model architecture, optimizer config, environment freeze, PROV document —
-plus Lightning's native metric logging via `self.log()`.
+| Parameter | Default | Description |
+|---|---|---|
+| `model_name` | `None` | Model identifier (used in artifact paths) |
+| `experiment_name` | `"Training_Pipeline"` | MLflow experiment name |
+| `manifest_path` | auto-discover | Path to `manifest.csv` |
+| `data_root` | auto-discover | Root directory of dataset |
+| `test_size` | `0.2` | Test split fraction |
+| `random_state` | `42` | Random seed for split |
+| `fail_fast` | `True` | Stop training on verification failure |
+| `strict` | `False` | Require all provenance fields |
+| `register_model` | `True` | Register model architecture to MLflow |
+| `register_optimizer` | `True` | Register optimizer config to MLflow |
+| `register_scheduler` | `True` | Register scheduler config to MLflow |
+
+#### EnvironmentCallback
+
+Captures environment metadata (git, hardware, docker, environment freeze):
+
+```python
+from rationai.mlkit.lightning.callbacks import EnvironmentCallback
+
+callback = EnvironmentCallback(
+    skip_hardware=False,   # capture GPU/CPU/RAM info
+    snapshot_env=True,     # freeze requirements.txt
+)
+```
+
+#### DatasetVerificationCallback
+
+Verifies dataset integrity and optionally performs a stratified split:
+
+```python
+from rationai.mlkit.lightning.callbacks import DatasetVerificationCallback
+
+callback = DatasetVerificationCallback(
+    test_size=0.2,       # 0.0 to skip split
+    random_state=42,
+    fail_fast=True,      # stop training if verification fails
+)
+```
 
 ### Metrics
 
@@ -297,8 +295,10 @@ dataset = MetaTiledSlides(
 | `Trainer` | `from rationai.mlkit import Trainer` | Lightning Trainer with MLflow checkpoint sync |
 | `MLFlowLogger` | `from rationai.mlkit import MLFlowLogger` | Logger with git tags, stream capture, checkpoint sync |
 | `MultiloaderLifecycle` | `from rationai.mlkit import MultiloaderLifecycle` | Per-dataloader callback hooks |
-| `lightning_autolog` | `from rationai.mlkit.lightning import autolog` | Lightning-specific autolog decorator |
-| `with_cli_args` | `from rationai.mlkit.lightning import with_cli_args` | Programmatic config injection (Hydra) |
+| `ProvenanceCallback` | `from rationai.mlkit.lightning.callbacks import ProvenanceCallback` | Full PROV-O provenance capture |
+| `EnvironmentCallback` | `from rationai.mlkit.lightning.callbacks import EnvironmentCallback` | Environment metadata capture |
+| `DatasetVerificationCallback` | `from rationai.mlkit.lightning.callbacks import DatasetVerificationCallback` | Dataset verification + split |
+| `with_cli_args` | `from rationai.mlkit import with_cli_args` | Programmatic config injection (Hydra) |
 
 ---
 
@@ -306,45 +306,47 @@ dataset = MetaTiledSlides(
 
 ```
 .
-├── demo.py                      # End-to-end demo (all components)
-├── dummy_dataset_create.py      # Dummy data generator (CLI)
-├── user_to_mlflow.py            # User registration script
-├── pyproject.toml               # Project metadata + deps
-├── tests/
-│   └── test_all.py              # Unit test suite
-├── test_data/                   # Dummy datasets (gitignored)
-│   ├── dummy_dataset_1/
-│   │   ├── manifest.csv
-│   │   └── wsis/
-│   └── ...
+├── example_provenance_setup.py        # Setup: register users & dataset
+├── example_provenance_train.py        # Training with @autolog + ProvenanceCallback
+├── example_provenance_train_cfg.yaml  # Hydra config for the training example
+├── pyproject.toml                     # Project metadata + deps
+├── test_data/                         # Dummy datasets (gitignored)
 └── rationai/
     └── mlkit/
-        ├── __init__.py          # Package exports (lazy Lightning import)
-        ├── autolog.py           # Re-exports lightning.autolog
-        ├── with_cli_args.py     # Re-exports lightning.with_cli_args
-        ├── stream/              # ANSI-aware console capture
+        ├── __init__.py                # Package exports (lazy loading)
+        ├── autolog.py                 # @autolog decorator for Hydra scripts
+        ├── with_cli_args.py           # Programmatic config injection
+        ├── provenance/                # Dataset & user registration
+        │   ├── __init__.py
+        │   ├── register_dataset.py    # register_dataset, verify_dataset
+        │   └── register_user.py       # register_new_user
+        ├── stream/                    # ANSI-aware console capture
         │   ├── stream_capture.py
         │   ├── stream_logger.py
         │   └── stream_modifier.py
-        ├── metrics/             # Slide-level metric aggregation
+        ├── metrics/                   # Slide-level metric aggregation
         │   ├── aggregated_metric_collection.py
         │   ├── nested_metric_collection.py
         │   ├── aggregators.py
         │   └── lazy_metric_dict.py
-        ├── data/                # Data utilities
+        ├── data/                      # Data utilities
+        │   ├── shard_parquet.py
         │   ├── samplers/
         │   │   └── stratified_batch_sampler.py
         │   └── datasets/
         │       ├── meta_tiled_slides.py
-        │       └── openslide_tiles_dataset.py
-        └── lightning/           # Lightning + Hydra integration
-            ├── autolog.py
+        │       ├── openslide_tiles_dataset.py
+        │       └── slides_tiles_loader.py
+        └── lightning/                 # Lightning + Hydra integration
             ├── trainer.py
             ├── with_cli_args.py
             ├── callbacks/
+            │   ├── provenance.py      # ProvenanceCallback
+            │   ├── environment.py     # EnvironmentCallback
+            │   ├── dataset_verification.py  # DatasetVerificationCallback
             │   └── multiloader_lifecycle.py
             └── loggers/
-                └── mlflow.py    # MLFlowLogger (checkpoint sync, git tags)
+                └── mlflow.py          # MLFlowLogger (checkpoint sync, git tags)
 ```
 
 ---
