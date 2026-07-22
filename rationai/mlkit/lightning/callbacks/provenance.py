@@ -509,7 +509,23 @@ class ProvenanceCallback(Callback):
         register_optimizer: bool = True,
         register_scheduler: bool = True,
         prov_prefixes: dict[str, str] | None = None,
-    ):
+    ) -> None:
+        """Initialise the provenance callback.
+
+        Args:
+            model_name: Name of the model (defaults to ``MODEL_NAME`` env var or "model").
+            experiment_name: MLflow experiment name for the training run.
+            manifest_path: Path to manifest.csv (auto-detected if None).
+            data_root: Root directory of the dataset (auto-detected if None).
+            test_size: Fraction of data for the test split. Set to 0 to skip splitting.
+            random_state: Random seed for train/test split.
+            fail_fast: Abort training if dataset verification fails.
+            strict: If True, re-raise errors from optional provenance steps.
+            register_model: If True, auto-log model summary from pl_module.
+            register_optimizer: Log optimizer config (or True to auto-detect).
+            register_scheduler: Log scheduler config (or True to auto-detect).
+            prov_prefixes: Optional override for PROV namespace prefixes.
+        """
         self.model_name = model_name or os.environ.get("MODEL_NAME", "model")
         self.experiment_name = experiment_name
         self.manifest_path = manifest_path

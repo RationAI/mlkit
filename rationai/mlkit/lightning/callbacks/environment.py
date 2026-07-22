@@ -194,7 +194,15 @@ class EnvironmentCallback(Callback):
         skip_hardware: bool = False,
         snapshot_env: bool = True,
         strict: bool = False,
-    ):
+    ) -> None:
+        """Initialise the environment callback.
+
+        Args:
+            skip_hardware: Skip hardware detection if True. Auto-detected from
+                trainer loggers by default.
+            snapshot_env: If True, freeze the environment to an MLflow artifact.
+            strict: If True, re-raise errors from optional steps instead of logging.
+        """
         self.skip_hardware = skip_hardware
         self.snapshot_env = snapshot_env
         self.strict = strict

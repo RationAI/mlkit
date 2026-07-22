@@ -56,7 +56,15 @@ class DatasetVerificationCallback(Callback):
         test_size: float = 0.0,
         random_state: int = 42,
         fail_fast: bool = True,
-    ):
+    ) -> None:
+        """Initialise the dataset verification callback.
+
+        Args:
+            manifest_path: Path to manifest.csv (auto-detected if None).
+            test_size: Fraction of data for the test split. Set to 0 to skip splitting.
+            random_state: Random seed for train/test split.
+            fail_fast: Abort training if dataset verification fails.
+        """
         self._manifest_path = manifest_path
         self.test_size = test_size
         self.random_state = random_state
@@ -66,6 +74,12 @@ class DatasetVerificationCallback(Callback):
         self._split_data: dict[str, Any] | None = None
 
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
+        """Verify the dataset and optionally split into train/test.
+
+        Looks up the latest ``Dataset_Registry`` run, checks file integrity,
+        logs verification params to MLflow, and (when ``test_size > 0``)
+        performs a stratified train/test split saved as an MLflow artifact.
+        """
         if self._done:
             return
         self._done = True
