@@ -12,9 +12,6 @@ For automatic provenance capture with Lightning, use
 
 from __future__ import annotations
 
-import os
-from typing import Any
-
 from rationai.mlkit.provenance.dataset import (
     build_dataset_prov,
     register_dataset,
@@ -35,15 +32,3 @@ __all__ = [
     "register_new_user",
     "verify_dataset",
 ]
-
-
-def __getattr__(name: str) -> Any:
-    """Raise helpful error for removed ``autolog``."""
-    if name == "autolog":
-        raise ImportError(
-            "provenance.autolog has been removed. "
-            "Use ProvenanceCallback instead:\n\n"
-            "  from rationai.mlkit.lightning.callbacks import ProvenanceCallback\n"
-            "  trainer = Trainer(callbacks=[ProvenanceCallback(model_name='...')], ...)\n"
-        )
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
