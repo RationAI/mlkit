@@ -99,7 +99,9 @@ class DatasetVerificationCallback(Callback):
             manifest_path, data_root = _detect_manifest()
 
         if manifest_path is None:
-            log.warning("[DatasetVerificationCallback] No manifest.csv found — skipping")
+            log.warning(
+                "[DatasetVerificationCallback] No manifest.csv found — skipping"
+            )
             return
 
         if data_root is None:
@@ -115,12 +117,15 @@ class DatasetVerificationCallback(Callback):
 
         # ── Log verification results ────────────────────────────
         if mlflow.active_run():
-            mlflow.log_params({
-                "dataset_verified": verification["verified"],
-                "dataset_file_sizes_match": verification["file_sizes_match"] is True,
-                "dataset_files_missing": verification["files_missing"],
-                "dataset_files_total": verification["files_total"],
-            })
+            mlflow.log_params(
+                {
+                    "dataset_verified": verification["verified"],
+                    "dataset_file_sizes_match": verification["file_sizes_match"]
+                    is True,
+                    "dataset_files_missing": verification["files_missing"],
+                    "dataset_files_total": verification["files_total"],
+                }
+            )
             if verification["verified"]:
                 mlflow.set_tag("dataset_verification", "VERIFIED")
             else:
@@ -174,14 +179,16 @@ class DatasetVerificationCallback(Callback):
                 # Log split counts
                 train_labels = [s["label"] for s in train_samples]
                 test_labels = [s["label"] for s in test_samples]
-                mlflow.log_params({
-                    "train_samples": len(train_samples),
-                    "test_samples": len(test_samples),
-                    "train_positive": sum(train_labels),
-                    "train_negative": len(train_labels) - sum(train_labels),
-                    "test_positive": sum(test_labels),
-                    "test_negative": len(test_labels) - sum(test_labels),
-                    "split_test_size": self.test_size,
-                    "split_random_state": self.random_state,
-                    "split_stratified": True,
-                })
+                mlflow.log_params(
+                    {
+                        "train_samples": len(train_samples),
+                        "test_samples": len(test_samples),
+                        "train_positive": sum(train_labels),
+                        "train_negative": len(train_labels) - sum(train_labels),
+                        "test_positive": sum(test_labels),
+                        "test_negative": len(test_labels) - sum(test_labels),
+                        "split_test_size": self.test_size,
+                        "split_random_state": self.random_state,
+                        "split_stratified": True,
+                    }
+                )

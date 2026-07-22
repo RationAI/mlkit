@@ -79,16 +79,36 @@ def _get_prov_prefixes(override: dict[str, str] | None = None) -> dict[str, str]
             log.warning(f"PROV_BASE_URI is not valid JSON: {e} — using defaults")
     return _DEFAULT_PROV_PREFIXES
 
+
 _ACTIVITY_HP_KEYS = {
-    "learning_rate", "lr", "batch_size", "epochs", "optimizer",
-    "loss_function", "dropout", "weight_decay", "momentum",
-    "num_layers", "hidden_size", "embedding_dim", "num_classes",
-    "patch_size", "input_size", "augmentations",
+    "learning_rate",
+    "lr",
+    "batch_size",
+    "epochs",
+    "optimizer",
+    "loss_function",
+    "dropout",
+    "weight_decay",
+    "momentum",
+    "num_layers",
+    "hidden_size",
+    "embedding_dim",
+    "num_classes",
+    "patch_size",
+    "input_size",
+    "augmentations",
 }
 
 _WSI_PARAM_KEYS = {
-    "scanner", "slide_id", "wsi_id", "patient_id", "subject_id",
-    "institution", "site", "staining", "slicing_method",
+    "scanner",
+    "slide_id",
+    "wsi_id",
+    "patient_id",
+    "subject_id",
+    "institution",
+    "site",
+    "staining",
+    "slicing_method",
 }
 
 
@@ -96,14 +116,13 @@ _WSI_PARAM_KEYS = {
 # Model / Optimizer / Scheduler summaries
 # ──────────────────────────────────────────────
 
+
 def _model_summary(model: Any) -> dict[str, str | int]:
     """Extract architecture details from a torch.nn.Module."""
     info: dict[str, str | int] = {}
 
     total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(
-        p.numel() for p in model.parameters() if p.requires_grad
-    )
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     info["total_parameters"] = total_params
     info["trainable_parameters"] = trainable_params
 
@@ -145,11 +164,21 @@ def _scheduler_summary(scheduler: Any) -> dict[str, str | float]:
         return info
 
     info["scheduler_type"] = type(scheduler).__name__
-    for attr in ("step_size", "gamma", "milestones", "factor",
-                 "patience", "min_lr", "T_max", "eta_min"):
+    for attr in (
+        "step_size",
+        "gamma",
+        "milestones",
+        "factor",
+        "patience",
+        "min_lr",
+        "T_max",
+        "eta_min",
+    ):
         val = getattr(scheduler, attr, None)
         if val is not None:
-            info[f"sch_{attr}"] = str(list(val)) if isinstance(val, (list, tuple)) else str(val)
+            info[f"sch_{attr}"] = (
+                str(list(val)) if isinstance(val, (list, tuple)) else str(val)
+            )
 
     if hasattr(scheduler, "optimizer"):
         for name, value in scheduler.optimizer.defaults.items():
@@ -163,6 +192,7 @@ def _scheduler_summary(scheduler: Any) -> dict[str, str | float]:
 # PROV document builder
 # ──────────────────────────────────────────────
 
+
 def _safe_id(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
@@ -171,7 +201,9 @@ def _qualified(prefix: str, local: str) -> str:
     return f"{prefix}:{local}"
 
 
-def _typed_value(value: object, type_prefix: str = "xsd", type_local: str = "string") -> list[str]:
+def _typed_value(
+    value: object, type_prefix: str = "xsd", type_local: str = "string"
+) -> list[str]:
     return [str(value)]
 
 
@@ -241,11 +273,11 @@ def _build_prov_document(
 
     # ── 2. INPUT ENTITIES ──────────────────────────────────
     image_path_candidates = (
-        params.get("image_path") or
-        params.get("wsi_path") or
-        params.get("dataset_path") or
-        params.get("data_path") or
-        params.get("input_path")
+        params.get("image_path")
+        or params.get("wsi_path")
+        or params.get("dataset_path")
+        or params.get("data_path")
+        or params.get("input_path")
     )
 
     if image_path_candidates:
@@ -281,7 +313,9 @@ def _build_prov_document(
         ds_local = _safe_id(f"dataset_{run_id[:8]}")
         ds_id = _qualified("gen", ds_local)
         entities[ds_id] = {
-            "schema:name": _typed_value(f"Training dataset ({train_count} train, {test_count} test)"),
+            "schema:name": _typed_value(
+                f"Training dataset ({train_count} train, {test_count} test)"
+            ),
             "prov:type": [_qualified_name("sosa", "Sample")],
         }
         used[_blank_rel_id()] = {
@@ -375,13 +409,35 @@ def _build_prov_document(
     if org_val:
         meta_entity["cpm:organization"] = _typed_value(org_val)
 
-    skip_keys = set(_ACTIVITY_HP_KEYS) | _WSI_PARAM_KEYS | {
-        "image_path", "wsi_path", "dataset_path", "data_path", "input_path",
-        "segmentation", "model", "pretrained_model", "backbone", "feature_extractor",
-        "dataset_name", "dataset_version", "data_split", "split",
-        "scanner", "slide_id", "wsi_id", "patient_id", "subject_id",
-        "institution", "site", "staining", "slicing_method",
-    }
+    skip_keys = (
+        set(_ACTIVITY_HP_KEYS)
+        | _WSI_PARAM_KEYS
+        | {
+            "image_path",
+            "wsi_path",
+            "dataset_path",
+            "data_path",
+            "input_path",
+            "segmentation",
+            "model",
+            "pretrained_model",
+            "backbone",
+            "feature_extractor",
+            "dataset_name",
+            "dataset_version",
+            "data_split",
+            "split",
+            "scanner",
+            "slide_id",
+            "wsi_id",
+            "patient_id",
+            "subject_id",
+            "institution",
+            "site",
+            "staining",
+            "slicing_method",
+        }
+    )
 
     for key, val in params.items():
         if key not in skip_keys:
@@ -393,14 +449,22 @@ def _build_prov_document(
         meta_entity[f"gen:{safe_key}"] = _typed_value(mval)
 
     if split_data:
-        meta_entity["gen:split_test_size"] = _typed_value(split_data.get("test_size", "0.2"))
-        meta_entity["gen:split_random_state"] = _typed_value(str(split_data.get("random_state", "42")))
+        meta_entity["gen:split_test_size"] = _typed_value(
+            split_data.get("test_size", "0.2")
+        )
+        meta_entity["gen:split_random_state"] = _typed_value(
+            str(split_data.get("random_state", "42"))
+        )
         meta_entity["gen:split_stratified"] = ["true"]
 
         if split_data.get("train"):
-            meta_entity["gen:split_train"] = [_typed_value(json.dumps(split_data["train"]))[0]]
+            meta_entity["gen:split_train"] = [
+                _typed_value(json.dumps(split_data["train"]))[0]
+            ]
         if split_data.get("test"):
-            meta_entity["gen:split_test"] = [_typed_value(json.dumps(split_data["test"]))[0]]
+            meta_entity["gen:split_test"] = [
+                _typed_value(json.dumps(split_data["test"]))[0]
+            ]
 
     if requirements:
         meta_entity["gen:requirements"] = [requirements]
@@ -473,6 +537,7 @@ def _build_prov_document(
 # ──────────────────────────────────────────────
 # Slim ProvenanceCallback
 # ──────────────────────────────────────────────
+
 
 class ProvenanceCallback(Callback):
     """Lightning callback that captures PROV document + run summary.
@@ -593,12 +658,15 @@ class ProvenanceCallback(Callback):
                 client = mlflow.tracking.MlflowClient()
                 run_data = client.get_run(run.info.run_id)
                 run_tags = dict(run_data.data.tags) if run_data.data.tags else {}
-            self._git_commit = run_tags.get("mlflow.source.git.commit",
-                                        run_tags.get("git.commit", "unknown"))
-            self._git_url = run_tags.get("mlflow.source.git.repoUrl",
-                                     run_tags.get("git.repo_url", "unknown"))
-            self._git_branch = run_tags.get("mlflow.source.git.branch",
-                                        run_tags.get("git.branch", "unknown"))
+            self._git_commit = run_tags.get(
+                "mlflow.source.git.commit", run_tags.get("git.commit", "unknown")
+            )
+            self._git_url = run_tags.get(
+                "mlflow.source.git.repoUrl", run_tags.get("git.repo_url", "unknown")
+            )
+            self._git_branch = run_tags.get(
+                "mlflow.source.git.branch", run_tags.get("git.branch", "unknown")
+            )
         except Exception as e:
             if self.strict:
                 raise
@@ -615,8 +683,7 @@ class ProvenanceCallback(Callback):
 
         # ── Hardware (skip if MLflow system metrics are on) ─────
         sys_metrics_on = any(
-            getattr(logger, "log_system_metrics", False)
-            for logger in trainer.loggers
+            getattr(logger, "log_system_metrics", False) for logger in trainer.loggers
         )
         hardware = {} if sys_metrics_on else _detect_hardware()
         docker = _detect_docker()
@@ -676,23 +743,28 @@ class ProvenanceCallback(Callback):
             # Log split counts
             train_labels = [s["label"] for s in train_samples]
             test_labels = [s["label"] for s in test_samples]
-            mlflow.log_params({
-                "train_samples": len(train_samples),
-                "test_samples": len(test_samples),
-                "train_positive": sum(train_labels),
-                "train_negative": len(train_labels) - sum(train_labels),
-                "test_positive": sum(test_labels),
-                "test_negative": len(test_labels) - sum(test_labels),
-            })
+            mlflow.log_params(
+                {
+                    "train_samples": len(train_samples),
+                    "test_samples": len(test_samples),
+                    "train_positive": sum(train_labels),
+                    "train_negative": len(train_labels) - sum(train_labels),
+                    "test_positive": sum(test_labels),
+                    "test_negative": len(test_labels) - sum(test_labels),
+                }
+            )
 
             # Log verification results
             if verification:
-                mlflow.log_params({
-                    "dataset_verified": verification["verified"],
-                    "dataset_file_sizes_match": verification["file_sizes_match"] is True,
-                    "dataset_files_missing": verification["files_missing"],
-                    "dataset_files_total": verification["files_total"],
-                })
+                mlflow.log_params(
+                    {
+                        "dataset_verified": verification["verified"],
+                        "dataset_file_sizes_match": verification["file_sizes_match"]
+                        is True,
+                        "dataset_files_missing": verification["files_missing"],
+                        "dataset_files_total": verification["files_total"],
+                    }
+                )
                 if verification["verified"]:
                     mlflow.set_tag("dataset_verification", "VERIFIED")
                 else:
@@ -708,8 +780,10 @@ class ProvenanceCallback(Callback):
                         + "\n".join(f"  {d}" for d in verification["details"]),
                     )
         else:
-            log.warning("[ProvenanceCallback] No manifest.csv found — "
-                        "train/test split not logged.")
+            log.warning(
+                "[ProvenanceCallback] No manifest.csv found — "
+                "train/test split not logged."
+            )
 
         # ── Tags ────────────────────────────────────────────────
         tags: dict[str, str] = {}
@@ -723,12 +797,14 @@ class ProvenanceCallback(Callback):
         if dataset_run_id:
             tags["dataset_run_id"] = dataset_run_id
 
-        tags.update({
-            "git_commit": self._git_commit,
-            "git_url": self._git_url,
-            "git_branch": self._git_branch,
-            "prov_start_time": datetime.now(UTC).isoformat(),
-        })
+        tags.update(
+            {
+                "git_commit": self._git_commit,
+                "git_url": self._git_url,
+                "git_branch": self._git_branch,
+                "prov_start_time": datetime.now(UTC).isoformat(),
+            }
+        )
         mlflow.set_tags(tags)
 
         # ── Params: hardware + docker + split config ────────────
@@ -789,13 +865,9 @@ class ProvenanceCallback(Callback):
         self._ensure_active_run(trainer)
 
         # Check if sibling callbacks are present
-        has_env = any(
-            isinstance(cb, EnvironmentCallback)
-            for cb in trainer.callbacks
-        )
+        has_env = any(isinstance(cb, EnvironmentCallback) for cb in trainer.callbacks)
         has_verify = any(
-            isinstance(cb, DatasetVerificationCallback)
-            for cb in trainer.callbacks
+            isinstance(cb, DatasetVerificationCallback) for cb in trainer.callbacks
         )
 
         if has_env or has_verify:
@@ -861,7 +933,8 @@ class ProvenanceCallback(Callback):
             params = {k: str(v) for k, v in run_data.data.params.items()}
             metrics = {k: float(v) for k, v in run_data.data.metrics.items()}
             tags = {
-                k: v for k, v in run_data.data.tags.items()
+                k: v
+                for k, v in run_data.data.tags.items()
                 if not k.startswith("mlflow.")
             }
 
@@ -882,11 +955,17 @@ class ProvenanceCallback(Callback):
                     "test_size": self.test_size,
                     "random_state": self.random_state,
                     "stratified": True,
-                    "train_count": len(self._split_data["train"]) if isinstance(self._split_data, dict) else 0,  # type: ignore[arg-type]
-                    "test_count": len(self._split_data["test"]) if isinstance(self._split_data, dict) else 0,  # type: ignore[arg-type]
+                    "train_count": len(self._split_data["train"])
+                    if isinstance(self._split_data, dict)
+                    else 0,  # type: ignore[arg-type]
+                    "test_count": len(self._split_data["test"])
+                    if isinstance(self._split_data, dict)
+                    else 0,  # type: ignore[arg-type]
                     "train": self._split_data["train"] if self._split_data else None,
                     "test": self._split_data["test"] if self._split_data else None,
-                } if self._split_data else None,
+                }
+                if self._split_data
+                else None,
                 "dataset_verification": self._verification,
                 "requirements": self._frozen_requirements,
                 "source": {
@@ -916,7 +995,9 @@ class ProvenanceCallback(Callback):
                     "random_state": self.random_state,
                     "train": self._split_data["train"] if self._split_data else None,
                     "test": self._split_data["test"] if self._split_data else None,
-                } if self._split_data else None,
+                }
+                if self._split_data
+                else None,
                 requirements=self._frozen_requirements,
                 verification=self._verification,
                 prov_prefixes=_get_prov_prefixes(self._prov_prefixes),
@@ -936,7 +1017,9 @@ class ProvenanceCallback(Callback):
         except Exception as e:
             if self.strict:
                 raise
-            log.warning("[ProvenanceCallback] Could not write provenance artifacts: %s", e)
+            log.warning(
+                "[ProvenanceCallback] Could not write provenance artifacts: %s", e
+            )
 
         # ── Clean up temp dirs ──────────────────────────────────
         for d in self._temp_dirs:

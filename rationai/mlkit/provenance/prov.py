@@ -53,6 +53,7 @@ def get_prov_prefixes(override: dict[str, str] | None = None) -> dict[str, str]:
 # Small helpers used inside the PROV document
 # ──────────────────────────────────────────────
 
+
 def _safe_id(name: str) -> str:
     """Sanitise a name so it can be used as a PROV identifier fragment."""
     return re.sub(r"[^a-zA-Z0-9_]", "_", name)
@@ -81,6 +82,7 @@ def _iso_timestamp(ts_ms: int | None = None) -> str:
 # ──────────────────────────────────────────────
 # PROV document builders
 # ──────────────────────────────────────────────
+
 
 def build_user_prov(
     run_id: str,
@@ -118,6 +120,7 @@ def build_user_prov(
     was_generated_by: dict[str, dict[str, str]] = {}
 
     rel_counter = [0]
+
     def _blank_rel_id() -> str:
         rid = f"_:n{rel_counter[0]}"
         rel_counter[0] += 1
@@ -231,6 +234,7 @@ def build_dataset_prov(
     was_generated_by: dict[str, dict[str, Any]] = {}
 
     rel_counter = [0]
+
     def _blank_rel_id() -> str:
         rid = f"_:n{rel_counter[0]}"
         rel_counter[0] += 1

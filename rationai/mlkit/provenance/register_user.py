@@ -42,18 +42,22 @@ def register_new_user(
     ) as run:
         run_id = run.info.run_id
 
-        mlflow.log_params({
-            "username": username,
-            "real_name": real_name,
-            "email": email,
-            "organization": organization,
-            "lead_name": lead_name,
-            "lead_email": lead_email,
-        })
-        mlflow.set_tags({
-            "username": username,
-            "organization": organization,
-        })
+        mlflow.log_params(
+            {
+                "username": username,
+                "real_name": real_name,
+                "email": email,
+                "organization": organization,
+                "lead_name": lead_name,
+                "lead_email": lead_email,
+            }
+        )
+        mlflow.set_tags(
+            {
+                "username": username,
+                "organization": organization,
+            }
+        )
 
         # ── PROV-O document ────────────────────────────────
         from rationai.mlkit.provenance.prov import build_user_prov

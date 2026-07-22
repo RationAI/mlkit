@@ -14,6 +14,7 @@ import pandas as pd
 
 # ── Internal helpers ────────────────────────────────────────────────────
 
+
 def _lookup_experiment(name: str) -> str | None:
     """Return the MLflow experiment ID for *name*, or None."""
     exp = mlflow.get_experiment_by_name(name)
@@ -50,9 +51,11 @@ def _detect_manifest() -> tuple[str | None, str | None]:
             if "manifest.csv" in filenames:
                 return (
                     os.path.join(dirpath, "manifest.csv"),
-                    os.path.dirname(os.path.abspath(
-                        os.path.join(dirpath, "manifest.csv"),
-                    )),
+                    os.path.dirname(
+                        os.path.abspath(
+                            os.path.join(dirpath, "manifest.csv"),
+                        )
+                    ),
                 )
     return None, None
 
@@ -84,8 +87,13 @@ def verify_dataset(
 
     Returns a dict with keys::
 
-        {"verified": bool, "file_sizes_match": bool|None,
-         "files_missing": int, "files_total": int, "details": list[str]}
+        {
+            "verified": bool,
+            "file_sizes_match": bool | None,
+            "files_missing": int,
+            "files_total": int,
+            "details": list[str],
+        }
     """
     if manifest_path is None:
         manifest_path, data_root = _detect_manifest()
@@ -130,7 +138,9 @@ def _verify_dataset(
     }
 
     if not dataset_run_id:
-        result["details"].append("No Dataset_Registry run found — skipping verification")
+        result["details"].append(
+            "No Dataset_Registry run found — skipping verification"
+        )
         return result
 
     # Fetch registered metadata
@@ -157,7 +167,8 @@ def _verify_dataset(
 
     if not result["file_sizes_match"]:
         mismatched = [
-            name for name in reg_file_sizes
+            name
+            for name in reg_file_sizes
             if curr_file_sizes.get(name) != reg_file_sizes[name]
         ]
         if mismatched:
@@ -187,6 +198,7 @@ def _verify_dataset(
 
 
 # ── Hash-based registration (preferred) ──────────────────────────────────
+
 
 def register_dataset(
     dataset_dir: str,
@@ -246,19 +258,23 @@ def register_dataset(
     run_active = True
 
     try:
-        mlflow.log_params({
-            "dataset_root": dataset_dir,
-            "num_samples": len(samples),
-            "num_positive": sum(1 for s in samples if s["label"] == 1),
-            "num_negative": sum(1 for s in samples if s["label"] == 0),
-        })
+        mlflow.log_params(
+            {
+                "dataset_root": dataset_dir,
+                "num_samples": len(samples),
+                "num_positive": sum(1 for s in samples if s["label"] == 1),
+                "num_negative": sum(1 for s in samples if s["label"] == 0),
+            }
+        )
 
-        mlflow.set_tags({
-            "dataset_name": dataset_name,
-            "version": version,
-            "file_sizes": json.dumps(file_sizes),
-            "file_mtimes": json.dumps(file_mtimes),
-        })
+        mlflow.set_tags(
+            {
+                "dataset_name": dataset_name,
+                "version": version,
+                "file_sizes": json.dumps(file_sizes),
+                "file_mtimes": json.dumps(file_mtimes),
+            }
+        )
 
         # ── PROV-O document (W3C PROV-O compatible) ────────────
         from rationai.mlkit.provenance.prov import build_dataset_prov
@@ -291,14 +307,18 @@ def register_dataset(
         legacy_path = os.path.join(legacy_prov_dir, "dataset_provenance.json")
         try:
             with open(legacy_path, "w") as f:
-                json.dump({
-                    "dataset_name": dataset_name,
-                    "version": version,
-                    "dataset_root": dataset_dir,
-                    "file_sizes": file_sizes,
-                    "file_mtimes": file_mtimes,
-                    "num_samples": len(samples),
-                }, f, indent=2)
+                json.dump(
+                    {
+                        "dataset_name": dataset_name,
+                        "version": version,
+                        "dataset_root": dataset_dir,
+                        "file_sizes": file_sizes,
+                        "file_mtimes": file_mtimes,
+                        "num_samples": len(samples),
+                    },
+                    f,
+                    indent=2,
+                )
             mlflow.log_artifact(legacy_path, artifact_path="provenance")
         finally:
             shutil.rmtree(legacy_prov_dir, ignore_errors=True)
@@ -308,6 +328,3 @@ def register_dataset(
 
     print(f"  [register_dataset] {dataset_name} v{version} → run_id={run_id}")
     return run_id
-
-
-

@@ -39,6 +39,7 @@ log = logging.getLogger(__name__)
 # Helpers
 # ──────────────────────────────────────────────
 
+
 def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
     """Find the user run from User_Registry.  Auto-detect username."""
     from rationai.mlkit.provenance.register_dataset import _lookup_experiment
@@ -46,9 +47,14 @@ def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
     username = os.environ.get("MLFLOW_USER")
     if not username:
         with contextlib.suppress(subprocess.CalledProcessError):
-            username = subprocess.check_output(
-                ["git", "config", "user.name"], stderr=subprocess.DEVNULL,
-            ).decode().strip()
+            username = (
+                subprocess.check_output(
+                    ["git", "config", "user.name"],
+                    stderr=subprocess.DEVNULL,
+                )
+                .decode()
+                .strip()
+            )
     if not username:
         username = os.environ.get("USER", "unknown")
 
@@ -89,6 +95,7 @@ def _detect_hardware() -> dict[str, str | int]:
 
     try:
         import psutil
+
         mem = psutil.virtual_memory()
         info["ram_total_gb"] = round(mem.total / 1e9, 1)
     except ImportError:
@@ -123,9 +130,7 @@ def _detect_docker() -> dict[str, str | bool]:
             with open("/proc/self/mountinfo") as f:
                 for line in f:
                     for p in line.split():
-                        if len(p) == 64 and all(
-                            c in "0123456789abcdef" for c in p
-                        ):
+                        if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
                             info["container_id_short"] = p[:12]
                             break
         except FileNotFoundError:
@@ -137,7 +142,9 @@ def _detect_docker() -> dict[str, str | bool]:
             try:
                 result = subprocess.run(
                     ["docker", "inspect", "--format={{.Config.Image}}", cid],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     image = result.stdout.strip()
@@ -168,6 +175,7 @@ def _snapshot_environment(artifact_dir: str) -> str:
 # ──────────────────────────────────────────────
 # Callback
 # ──────────────────────────────────────────────
+
 
 class EnvironmentCallback(Callback):
     """Capture hardware, docker, git, user, and environment snapshot at training start.
@@ -231,12 +239,15 @@ class EnvironmentCallback(Callback):
                 client = mlflow.tracking.MlflowClient()
                 run_data = client.get_run(run.info.run_id)
                 git_tags = dict(run_data.data.tags) if run_data.data.tags else {}
-            self._git_commit = git_tags.get("mlflow.source.git.commit",
-                                        git_tags.get("git.commit", "unknown"))
-            self._git_url = git_tags.get("mlflow.source.git.repoUrl",
-                                     git_tags.get("git.repo_url", "unknown"))
-            self._git_branch = git_tags.get("mlflow.source.git.branch",
-                                 git_tags.get("git.branch", "unknown"))
+            self._git_commit = git_tags.get(
+                "mlflow.source.git.commit", git_tags.get("git.commit", "unknown")
+            )
+            self._git_url = git_tags.get(
+                "mlflow.source.git.repoUrl", git_tags.get("git.repo_url", "unknown")
+            )
+            self._git_branch = git_tags.get(
+                "mlflow.source.git.branch", git_tags.get("git.branch", "unknown")
+            )
         except Exception as e:
             if self.strict:
                 raise
@@ -259,14 +270,18 @@ class EnvironmentCallback(Callback):
                 for logger in trainer.loggers
             )
             if sys_metrics_on:
-                log.info("[EnvironmentCallback] Skipping hardware — MLflow system metrics enabled")
+                log.info(
+                    "[EnvironmentCallback] Skipping hardware — MLflow system metrics enabled"
+                )
             else:
                 try:
                     self._hardware = _detect_hardware()
                 except Exception as e:
                     if self.strict:
                         raise
-                    log.warning("[EnvironmentCallback] Hardware detection failed: %s", e)
+                    log.warning(
+                        "[EnvironmentCallback] Hardware detection failed: %s", e
+                    )
 
         # ── Docker detection ────────────────────────────────────
         try:
@@ -285,16 +300,19 @@ class EnvironmentCallback(Callback):
                     env_tags[key] = self._user_tags[key]
 
         from rationai.mlkit.provenance.register_dataset import _lookup_dataset_run
+
         dataset_run_id = _lookup_dataset_run()
         if dataset_run_id:
             env_tags["dataset_run_id"] = dataset_run_id
 
-        env_tags.update({
-            "git_commit": self._git_commit,
-            "git_url": self._git_url,
-            "git_branch": self._git_branch,
-            "prov_start_time": datetime.now(UTC).isoformat(),
-        })
+        env_tags.update(
+            {
+                "git_commit": self._git_commit,
+                "git_url": self._git_url,
+                "git_branch": self._git_branch,
+                "prov_start_time": datetime.now(UTC).isoformat(),
+            }
+        )
         mlflow.set_tags(env_tags)
 
         # ── Log hardware + docker params ────────────────────────
