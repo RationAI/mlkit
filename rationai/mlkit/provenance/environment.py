@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import logging
 import os
 import platform
 import shutil
 import subprocess
+from datetime import UTC, datetime
+from typing import Any
 
 import torch
 
@@ -169,3 +172,180 @@ def _snapshot_environment(artifact_dir: str) -> str:
 
     with open(req_path) as f:
         return f.read()
+
+
+# ──────────────────────────────────────────────
+# Core environment capture (callback-free)
+# ──────────────────────────────────────────────
+
+
+def _get_git_tags() -> dict[str, str]:
+    """Read git tags from active MLflow run."""
+    import mlflow
+
+    git_tags: dict[str, str] = {}
+    run = mlflow.active_run()
+    if run and run.info and run.info.run_id:
+        client = mlflow.tracking.MlflowClient()
+        run_data = client.get_run(run.info.run_id)
+        git_tags = dict(run_data.data.tags) if run_data.data.tags else {}
+    return git_tags
+
+
+def capture_environment(
+    skip_hardware: bool = False,
+    snapshot_env: bool = True,
+    strict: bool = False,
+) -> dict[str, object]:
+    """Capture full environment metadata and log to active MLflow run.
+
+    This is the core fn used by both EnvironmentCallback and
+    @log_environment.  Call directly for script-based logging.
+
+    Returns dict with keys: git_commit, git_url, git_branch, hardware,
+    docker, frozen_requirements, user_run_id, user_tags.
+    """
+    import mlflow
+
+    from rationai.mlkit.provenance.dataset import _lookup_dataset_run
+
+    if not mlflow.active_run():
+        return {}
+
+    result: dict[str, object] = {}
+
+    # ── Git info ──────────────────────────────────────────────
+    try:
+        git_tags = _get_git_tags()
+        result["git_commit"] = git_tags.get(
+            "mlflow.source.git.commit", git_tags.get("git.commit", "unknown")
+        )
+        result["git_url"] = git_tags.get(
+            "mlflow.source.git.repoUrl", git_tags.get("git.repo_url", "unknown")
+        )
+        result["git_branch"] = git_tags.get(
+            "mlflow.source.git.branch", git_tags.get("git.branch", "unknown")
+        )
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] Git info failed: %s", e)
+        result.update(git_commit="unknown", git_url="unknown", git_branch="unknown")
+
+    # ── User lookup ───────────────────────────────────────────
+    try:
+        user_run_id, user_tags = _lookup_user_run()
+        result["user_run_id"] = user_run_id
+        result["user_tags"] = user_tags or {}
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] User lookup failed: %s", e)
+        result.update(user_run_id=None, user_tags={})
+
+    # ── Hardware ──────────────────────────────────────────────
+    try:
+        if not skip_hardware:
+            result["hardware"] = _detect_hardware()
+        else:
+            result["hardware"] = {}
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] Hardware detection failed: %s", e)
+        result["hardware"] = {}
+
+    # ── Docker ────────────────────────────────────────────────
+    try:
+        result["docker"] = _detect_docker()
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] Docker detection failed: %s", e)
+        result["docker"] = {}
+
+    # ── Log tags to MLflow ────────────────────────────────────
+    env_tags: dict[str, str] = {}
+    if result.get("user_run_id"):
+        env_tags["user_run_id"] = str(result["user_run_id"])
+        utags: dict[str, str] = result.get("user_tags") or {}  # type: ignore[assignment]
+        for key in ("username", "real_name", "organization"):
+            if key in utags:
+                env_tags[key] = utags[key]
+
+    dataset_run_id = _lookup_dataset_run()
+    if dataset_run_id:
+        env_tags["dataset_run_id"] = dataset_run_id
+
+    env_tags.update(
+        {
+            "git_commit": str(result.get("git_commit", "unknown")),
+            "git_url": str(result.get("git_url", "unknown")),
+            "git_branch": str(result.get("git_branch", "unknown")),
+            "prov_start_time": datetime.now(UTC).isoformat(),
+        }
+    )
+    mlflow.set_tags(env_tags)
+
+    # ── Log params ────────────────────────────────────────────
+    all_params: dict[str, str | float | int] = {
+        **result.get("hardware", {}),  # type: ignore
+        **result.get("docker", {}),  # type: ignore
+    }
+    if all_params:
+        mlflow.log_params(all_params)
+
+    # ── Environment snapshot ──────────────────────────────────
+    frozen_requirements = None
+    if snapshot_env:
+        import uuid
+
+        artifact_dir = f"_mlflow_env_{uuid.uuid4().hex[:8]}"
+        os.makedirs(artifact_dir, exist_ok=True)
+        try:
+            frozen_requirements = _snapshot_environment(artifact_dir)
+            mlflow.log_artifacts(artifact_dir, artifact_path="environment")
+        except Exception as e:
+            if strict:
+                raise
+            log = logging.getLogger(__name__)
+            log.warning("[capture_environment] Environment snapshot failed: %s", e)
+    result["frozen_requirements"] = frozen_requirements
+
+    return result
+
+
+def log_environment(
+    skip_hardware: bool = False,
+    snapshot_env: bool = True,
+    strict: bool = False,
+) -> Any:
+    """Decorator that captures environment metadata before calling the wrapped function.
+
+    Requires an active MLflow run (set via mlflow.start_run() or @mlflow.autolog()).
+
+    Example::
+
+        @log_environment()
+        def train():
+            model.fit(X, y)
+    """
+    from functools import wraps
+
+    def decorator(fn: Any) -> Any:
+        @wraps(fn)
+        def wrapper(*fn_args: Any, **fn_kwargs: Any) -> Any:
+            capture_environment(
+                skip_hardware=skip_hardware,
+                snapshot_env=snapshot_env,
+                strict=strict,
+            )
+            return fn(*fn_args, **fn_kwargs)
+
+        return wrapper
+
+    return decorator
