@@ -175,3 +175,4 @@ test_data
 mlflow.db
 mlartifacts
 /example*
+/data
