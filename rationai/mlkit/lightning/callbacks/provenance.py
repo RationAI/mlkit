@@ -222,16 +222,16 @@ class ProvenanceCallback(Callback):
 
     def _fallback_on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Do environment + verification work when no sibling callbacks exist."""
-        from rationai.mlkit.lightning.callbacks.environment import (
-            _detect_docker,
-            _detect_hardware,
-            _lookup_user_run,
-            _snapshot_environment,
-        )
         from rationai.mlkit.provenance.dataset import (
             _detect_manifest,
             _lookup_dataset_run,
             _verify_dataset,
+        )
+        from rationai.mlkit.provenance.environment import (
+            _detect_docker,
+            _detect_hardware,
+            _lookup_user_run,
+            _snapshot_environment,
         )
 
         # ── Git info (read from MLflow tags set by MLFlowLogger) ──
