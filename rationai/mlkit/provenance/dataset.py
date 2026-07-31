@@ -30,6 +30,25 @@ from rationai.mlkit.provenance.common import (
 # ──────────────────────────────────────────────
 
 
+def _get_user_tags() -> tuple[str, str, str]:
+    """Read username, real_name, organization from active MLflow run tags.
+
+    Returns (username, real_name, organization).  Falls back to
+    ``mlflow.user`` / empty strings when not set.
+    """
+    try:
+        client = mlflow.tracking.MlflowClient()
+        run_id = mlflow.active_run().info.run_id
+        tags = {t.key: t.value for t in client.get_run(run_id).data.tags.values()}
+    except Exception:
+        tags = {}
+
+    username = tags.get("username", tags.get("mlflow.user", "unknown"))
+    real_name = tags.get("real_name", username)
+    organization = tags.get("organization", "")
+    return username, real_name, organization
+
+
 def build_dataset_prov(
     run_id: str,
     dataset_name: str,
@@ -45,9 +64,23 @@ def build_dataset_prov(
     """Build a PROV document for a dataset registration run.
 
     Produces a ``dataset`` entity (``sosa:Sample``) linked to the
-    registration activity and metadata bundle.
+    registration activity and metadata bundle.  Reads user info from
+    the active MLflow run's tags to create an agent and associate it
+    via ``prov:wasAssociatedWith``.
     """
     prefixes = prov_prefixes or get_prov_prefixes()
+
+    username, real_name, organization = _get_user_tags()
+
+    # ── AGENT (from MLflow tags) ─────────────────────
+    agent_local = _safe_id(f"user_{username}")
+    agent_id = _qualified("gen", agent_local)
+
+    agent_props: dict[str, list[Any]] = {}
+    agent_props["schema:name"] = _typed_value(real_name)
+    if organization:
+        agent_props["schema:affiliation"] = _typed_value(organization)
+    agent_props["prov:type"] = [_qualified_name("schema", "Person")]
 
     run_act_local = _safe_id(f"run_{run_id}")
     run_act_id = _qualified("gen", run_act_local)
@@ -63,8 +96,10 @@ def build_dataset_prov(
 
     entities: dict[str, dict[str, Any]] = {}
     activities: dict[str, dict[str, Any]] = {}
+    agents: dict[str, dict[str, Any]] = {agent_id: agent_props}
     used: dict[str, dict[str, Any]] = {}
     was_generated_by: dict[str, dict[str, Any]] = {}
+    was_associated_with: dict[str, dict[str, Any]] = {}
 
     rel_counter = [0]
 
@@ -131,6 +166,10 @@ def build_dataset_prov(
     activities[main_act_id] = main_activity
 
     # ── RELATIONSHIPS ─────────────────────────────────────
+    was_associated_with[_blank_rel_id()] = {
+        "prov:activity": run_act_id,
+        "prov:agent": agent_id,
+    }
     was_generated_by[_blank_rel_id()] = {
         "prov:entity": meta_id,
         "prov:activity": run_act_id,
@@ -142,10 +181,14 @@ def build_dataset_prov(
         inner["entity"] = entities
     if activities:
         inner["activity"] = activities
+    if agents:
+        inner["agent"] = agents
     if used:
         inner["used"] = used
     if was_generated_by:
         inner["wasGeneratedBy"] = was_generated_by
+    if was_associated_with:
+        inner["wasAssociatedWith"] = was_associated_with
 
     bundle_key = f"storage:{run_id}"
     return {"bundle": {bundle_key: inner}}
@@ -415,6 +458,11 @@ def register_dataset(
     run_active = True
 
     try:
+        # ── Environment + user tags ────────────────────────
+        from rationai.mlkit.provenance.environment import capture_environment
+
+        capture_environment(snapshot_env=False)
+
         mlflow.log_params(
             {
                 "dataset_root": dataset_dir,
