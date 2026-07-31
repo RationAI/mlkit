@@ -33,7 +33,12 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name in ("Trainer", "MultiloaderLifecycle", "with_cli_args"):
+    if name == "with_cli_args":
+        from rationai.mlkit.with_cli_args import with_cli_args
+
+        return with_cli_args
+
+    if name in ("Trainer", "MultiloaderLifecycle"):
         import importlib
 
         _mod = importlib.import_module("rationai.mlkit.lightning")
