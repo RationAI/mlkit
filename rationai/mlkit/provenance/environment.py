@@ -102,12 +102,24 @@ def _detect_hardware() -> dict[str, str | int]:
 
 
 def _detect_docker() -> dict[str, str | bool]:
-    """Detect if running inside Docker and extract container info."""
+    """Detect if running inside a container (Docker/Kubernetes) and extract info."""
     info: dict[str, str | bool] = {"docker": False}
 
+    # ── Check 1: /.dockerenv (standard Docker marker) ─────────
     if os.path.exists("/.dockerenv"):
         info["docker"] = True
 
+    # ── Check 2: Kubernetes DOWNWARD_API / pod env vars ───────
+    if not info["docker"]:
+        k8s_indicators = [
+            "KUBERNETES_SERVICE_HOST",
+            "KUBERNETES_SERVICE_PORT",
+        ]
+        if any(k in os.environ for k in k8s_indicators):
+            info["docker"] = True
+            info["runtime"] = "kubernetes"
+
+    # ── Check 3: cgroup v1 (Docker container ID path) ─────────
     if not info["docker"]:
         try:
             with open("/proc/self/cgroup") as f:
@@ -122,16 +134,24 @@ def _detect_docker() -> dict[str, str | bool]:
         except FileNotFoundError:
             pass
 
-    if not info.get("container_id_short"):
+    # ── Check 4: cgroup v2 (Kubernetes pod annotations) ───────
+    if not info["docker"]:
         try:
             with open("/proc/self/mountinfo") as f:
                 for line in f:
                     for p in line.split():
                         if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
+                            info["docker"] = True
                             info["container_id_short"] = p[:12]
                             break
         except FileNotFoundError:
             pass
+
+    # ── Check 5: /run/secrets/kubernetes.io (kube pod) ────────
+    if not info["docker"]:
+        if os.path.exists("/run/secrets/kubernetes.io"):
+            info["docker"] = True
+            info["runtime"] = "kubernetes"
 
     if info["docker"]:
         cid = str(info.get("container_id_short", ""))
