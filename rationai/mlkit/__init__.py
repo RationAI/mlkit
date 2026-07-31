@@ -5,6 +5,7 @@ from typing import Any
 from rationai.mlkit.autolog import autolog
 from rationai.mlkit.provenance.dataset import register_dataset
 from rationai.mlkit.stream import StreamCapture, StreamLogger
+from rationai.mlkit.with_cli_args import with_cli_args
 
 
 __all__ = [
@@ -33,11 +34,6 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name == "with_cli_args":
-        from rationai.mlkit.with_cli_args import with_cli_args
-
-        return with_cli_args
-
     if name in ("Trainer", "MultiloaderLifecycle"):
         import importlib
 
