@@ -229,6 +229,8 @@ class ProvenanceCallback(Callback):
         )
         from rationai.mlkit.provenance.environment import (
             _detect_docker,
+            _detect_pytorch,
+            _detect_seeds,
             _detect_hardware,
             _lookup_user_run,
             _snapshot_environment,
@@ -271,6 +273,8 @@ class ProvenanceCallback(Callback):
         )
         hardware = {} if sys_metrics_on else _detect_hardware()
         docker = _detect_docker()
+        pytorch = _detect_pytorch()
+        seeds = _detect_seeds()
 
         # ── Dataset verification & split ────────────────────────
         manifest_path = self.manifest_path
@@ -394,16 +398,21 @@ class ProvenanceCallback(Callback):
         )
         mlflow.set_tags(tags)
 
-        # ── Params: hardware + docker + split config ────────────
+        # ── Params: hardware + docker + pytorch + split config ──
         all_params: dict[str, str | float | int] = {
             "model_name": self.model_name,
             **hardware,
             **docker,
+            **pytorch,
             "split_test_size": self.test_size,
             "split_random_state": self.random_state,
             "split_stratified": True,
         }
         mlflow.log_params(all_params)
+
+        # ── Seeds as tags ───────────────────────────────────────
+        if seeds:
+            mlflow.set_tags({f"seed_{k}": str(v) for k, v in seeds.items()})
 
         # ── Environment snapshot ────────────────────────────────
         artifact_dir = f"_mlflow_env_{uuid.uuid4().hex[:8]}"

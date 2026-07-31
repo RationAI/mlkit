@@ -43,7 +43,9 @@ class EnvironmentCallback(Callback):
     Attributes set after ``on_fit_start``:
         - ``_git_commit``, ``_git_url``, ``_git_branch``
         - ``_hardware`` (dict)
+        - ``_pytorch`` (dict)
         - ``_docker`` (dict)
+        - ``_seeds`` (dict)
         - ``_frozen_requirements`` (str | None)
         - ``_user_run_id``, ``_user_tags``
 
@@ -77,7 +79,9 @@ class EnvironmentCallback(Callback):
         self._git_url: str = "unknown"
         self._git_branch: str = "unknown"
         self._hardware: dict[str, str | int] = {}
+        self._pytorch: dict[str, str] = {}
         self._docker: dict[str, str | bool] = {}
+        self._seeds: dict[str, str] = {}
         self._frozen_requirements: str | None = None
         self._user_run_id: str | None = None
         self._user_tags: dict[str, str] = {}
@@ -111,5 +115,7 @@ class EnvironmentCallback(Callback):
         self._user_run_id = result.get("user_run_id")  # type: ignore[assignment]
         self._user_tags = result.get("user_tags") or {}  # type: ignore[assignment]
         self._hardware = result.get("hardware") or {}  # type: ignore[assignment]
+        self._pytorch = result.get("pytorch") or {}  # type: ignore[assignment]
         self._docker = result.get("docker") or {}  # type: ignore[assignment]
+        self._seeds = result.get("seeds") or {}  # type: ignore[assignment]
         self._frozen_requirements = result.get("frozen_requirements")  # type: ignore[assignment]

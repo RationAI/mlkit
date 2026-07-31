@@ -7,7 +7,6 @@ used by both callbacks and standalone provenance workflows.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import logging
 import os
 import platform
@@ -96,6 +95,47 @@ def _detect_hardware() -> dict[str, str | int]:
     return info
 
 
+def _detect_pytorch() -> dict[str, str]:
+    """Detect PyTorch build details for GPU reproducibility."""
+    info: dict[str, str] = {}
+    info["torch_version"] = torch.__version__
+    info["torch_git_version"] = torch.version.git_version or "unknown"
+
+    if torch.cuda.is_available():
+        info["cuda_runtime"] = torch.version.cuda or "unknown"
+        try:
+            info["cudnn_version"] = str(torch.backends.cudnn.version())
+        except Exception:
+            info["cudnn_version"] = "unknown"
+        info["cudnn_enabled"] = str(torch.backends.cudnn.enabled)
+    else:
+        info["cuda_runtime"] = "n/a"
+        info["cudnn_version"] = "n/a"
+        info["cudnn_enabled"] = "n/a"
+
+    return info
+
+
+def _detect_seeds() -> dict[str, str]:
+    """Read random seed state from environment/config."""
+    info: dict[str, str] = {}
+    for key in ("SEED", "RANDOM_SEED", "PL_SEED", "TORCH_SEED"):
+        val = os.environ.get(key)
+        if val is not None:
+            try:
+                info["seed"] = str(int(val))
+                break
+            except ValueError:
+                pass
+    else:
+        import random
+
+        info["seed"] = "unset"
+        info["random_state"] = str(random.getrandbits(32))
+
+    return info
+
+
 # ──────────────────────────────────────────────
 # Docker detection
 # ──────────────────────────────────────────────
@@ -164,11 +204,7 @@ def _detect_docker() -> dict[str, str | bool]:
                     timeout=5,
                 )
                 if result.returncode == 0 and result.stdout.strip():
-                    image = result.stdout.strip()
-                    info["docker_image"] = image
-                    info["docker_image_hash"] = hashlib.sha256(
-                        image.encode()
-                    ).hexdigest()[:16]
+                    info["docker_image"] = result.stdout.strip()
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass
 
@@ -190,8 +226,67 @@ def _snapshot_environment(artifact_dir: str) -> str:
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(artifact_dir, src))
 
+    _snapshot_system_packages(artifact_dir)
+
     with open(req_path) as f:
         return f.read()
+
+
+def _snapshot_system_packages(artifact_dir: str) -> None:
+    """Snapshot installed system packages for container reproducibility.
+
+    Writes one of:
+      - ``system_packages.txt`` (dpkg, Debian/Ubuntu)
+      - ``system_packages_rpm.txt`` (rpm, RHEL/Fedora)
+      - ``system_packages_apk.txt`` (apk, Alpine)
+    """
+    # ── Debian/Ubuntu (dpkg) ─────────────────────────────────
+    try:
+        dpkg_path = os.path.join(artifact_dir, "system_packages.txt")
+        result = subprocess.run(
+            ["dpkg", "--get-selections"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            with open(dpkg_path, "w") as f:
+                f.write(result.stdout)
+            return
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # ── RHEL/Fedora (rpm) ────────────────────────────────────
+    try:
+        rpm_path = os.path.join(artifact_dir, "system_packages_rpm.txt")
+        result = subprocess.run(
+            ["rpm", "-qa", "--qf", "%{NAME}-%{VERSION}-%{RELEASE}\n"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            with open(rpm_path, "w") as f:
+                f.write(result.stdout)
+            return
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # ── Alpine (apk) ─────────────────────────────────────────
+    try:
+        apk_path = os.path.join(artifact_dir, "system_packages_apk.txt")
+        result = subprocess.run(
+            ["apk", "list", "--installed"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            with open(apk_path, "w") as f:
+                f.write(result.stdout)
+            return
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
 
 
 # ──────────────────────────────────────────────
@@ -233,6 +328,22 @@ def capture_environment(
         return {}
 
     result: dict[str, object] = {}
+
+    # ── PyTorch build info ───────────────────────────────────
+    try:
+        result["pytorch"] = _detect_pytorch()
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] PyTorch detection failed: %s", e)
+        result["pytorch"] = {}
+
+    # ── MLflow version ───────────────────────────────────────
+    try:
+        result["mlflow_version"] = mlflow.__version__
+    except Exception:
+        result["mlflow_version"] = "unknown"
 
     # ── Git info ──────────────────────────────────────────────
     try:
@@ -288,6 +399,16 @@ def capture_environment(
         log.warning("[capture_environment] Docker detection failed: %s", e)
         result["docker"] = {}
 
+    # ── Seeds ─────────────────────────────────────────────────
+    try:
+        result["seeds"] = _detect_seeds()
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] Seed detection failed: %s", e)
+        result["seeds"] = {}
+
     # ── Log tags to MLflow ────────────────────────────────────
     env_tags: dict[str, str] = {}
     if result.get("user_run_id"):
@@ -315,9 +436,15 @@ def capture_environment(
     all_params: dict[str, str | float | int] = {
         **result.get("hardware", {}),  # type: ignore
         **result.get("docker", {}),  # type: ignore
+        **result.get("pytorch", {}),  # type: ignore
     }
     if all_params:
         mlflow.log_params(all_params)
+
+    # ── Log seeds as tags (strings) ───────────────────────────
+    seeds = result.get("seeds") or {}  # type: ignore
+    if seeds:
+        mlflow.set_tags({f"seed_{k}": str(v) for k, v in seeds.items()})
 
     # ── Environment snapshot ──────────────────────────────────
     frozen_requirements = None
