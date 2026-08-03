@@ -67,9 +67,95 @@ def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
 # ──────────────────────────────────────────────
 
 
-def _detect_hardware() -> dict[str, str | int]:
-    """Detect CPU/GPU/hardware info."""
-    info: dict[str, str | int] = {}
+def _detect_k8s_resources() -> dict[str, float]:
+    """Read CPU/memory limits from cgroup (v2 or v1) when on Kubernetes.
+
+    Returns dict with keys like cpu_limit, memory_limit_gb.
+    Empty dict if not in container or files unreadable.
+    """
+    info: dict[str, float] = {}
+
+    # ── Quick heuristic: only bother if K8s indicators present ──
+    is_k8s = any(
+        k in os.environ for k in ("KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT")
+    )
+    has_docker_env = os.path.exists("/.dockerenv")
+    has_k8s_secrets = os.path.exists("/run/secrets/kubernetes.io")
+
+    if not (is_k8s or has_docker_env or has_k8s_secrets):
+        return info
+
+    # ── CPU limit (cgroup v2) ────────────────────────────────
+    cpu_limit = _read_cpu_max()
+    if cpu_limit is not None:
+        info["cpu_limit"] = cpu_limit
+    else:
+        # ── CPU limit (cgroup v1) ────────────────────────────
+        cpu_quota = _read_file_float("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+        cpu_period = _read_file_float("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+        if cpu_quota is not None and cpu_period is not None and cpu_period > 0:
+            info["cpu_limit"] = round(cpu_quota / cpu_period, 2)
+
+    # ── Memory limit (cgroup v2) ─────────────────────────────
+    mem_max = _read_file_int("/sys/fs/cgroup/memory.max")
+    if mem_max is not None and mem_max != 9223372036854771712:
+        info["memory_limit_gb"] = round(mem_max / 1e9, 2)
+    else:
+        # ── Memory limit (cgroup v1) ─────────────────────────
+        mem_limit = _read_file_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+        if mem_limit is not None and mem_limit != 9223372036854771712:
+            info["memory_limit_gb"] = round(mem_limit / 1e9, 2)
+
+    return info
+
+
+def _read_file_int(path: str) -> int | None:
+    """Read a single integer from a file. Return None on failure."""
+    try:
+        with open(path) as f:
+            text = f.read().strip()
+            if text == "max":
+                return None
+            return int(text)
+    except (FileNotFoundError, ValueError, PermissionError):
+        return None
+
+
+def _read_file_float(path: str) -> float | None:
+    """Read a single float from a file. Return None on failure."""
+    try:
+        with open(path) as f:
+            return float(f.read().strip())
+    except (FileNotFoundError, ValueError, PermissionError):
+        return None
+
+
+def _read_cpu_max() -> float | None:
+    """Parse /sys/fs/cgroup/cpu.max (cgroup v2).
+
+    Format: <limit> <period>  (e.g. '100000 100000' = 1 CPU)
+    'max' means unlimited → None.
+    """
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:
+            parts = f.read().strip().split()
+            if len(parts) != 2 or parts[0] == "max":
+                return None
+            limit, period = int(parts[0]), int(parts[1])
+            if period <= 0:
+                return None
+            return round(limit / period, 2)
+    except (FileNotFoundError, ValueError, PermissionError):
+        return None
+
+
+def _detect_hardware() -> dict[str, str | int | float]:
+    """Detect CPU/GPU/hardware info.
+
+    When running in Kubernetes container, also logs resource limits
+    (cpu_limit, memory_limit_gb) from cgroup files.
+    """
+    info: dict[str, str | int | float] = {}
 
     if torch.cuda.is_available():
         info["gpu_name"] = torch.cuda.get_device_name(0)
@@ -91,6 +177,10 @@ def _detect_hardware() -> dict[str, str | int]:
         info["ram_total_gb"] = round(mem.total / 1e9, 1)
     except ImportError:
         pass
+
+    # ── K8s resource limits (no-op outside container) ────────
+    k8s_resources = _detect_k8s_resources()
+    info.update(k8s_resources)
 
     return info
 
