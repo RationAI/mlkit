@@ -1,6 +1,6 @@
 """Environment detection helpers for provenance tracking.
 
-Provides hardware, docker, user lookup, and environment snapshot functions
+Provides hardware and environment snapshot functions
 used by both callbacks and standalone provenance workflows.
 """
 
@@ -70,7 +70,7 @@ def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
 def _detect_k8s_resources() -> dict[str, float]:
     """Read CPU/memory limits from cgroup (v2 or v1) when on Kubernetes.
 
-    Returns dict with keys like cpu_limit, memory_limit_gb.
+    Returns dict with keys: cpu_limit, memory_limit_gb.
     Empty dict if not in container or files unreadable.
     """
     info: dict[str, float] = {}
@@ -166,19 +166,10 @@ def _detect_hardware() -> dict[str, str | int | float]:
     else:
         info["gpu_name"] = "none"
 
-    info["cpu_count_logical"] = os.cpu_count() or 0
     info["os_platform"] = platform.platform()
     info["python_version"] = platform.python_version()
 
-    try:
-        import psutil
-
-        mem = psutil.virtual_memory()
-        info["ram_total_gb"] = round(mem.total / 1e9, 1)
-    except ImportError:
-        pass
-
-    # ── K8s resource limits (no-op outside container) ────────
+    # ── K8s resources (no-op outside container) ──────────────
     k8s_resources = _detect_k8s_resources()
     info.update(k8s_resources)
 
@@ -229,76 +220,6 @@ def _detect_seeds() -> dict[str, str]:
 # ──────────────────────────────────────────────
 # Docker detection
 # ──────────────────────────────────────────────
-
-
-def _detect_docker() -> dict[str, str | bool]:
-    """Detect if running inside a container (Docker/Kubernetes) and extract info."""
-    info: dict[str, str | bool] = {"docker": False}
-
-    # ── Check 1: /.dockerenv (standard Docker marker) ─────────
-    if os.path.exists("/.dockerenv"):
-        info["docker"] = True
-
-    # ── Check 2: Kubernetes DOWNWARD_API / pod env vars ───────
-    if not info["docker"]:
-        k8s_indicators = [
-            "KUBERNETES_SERVICE_HOST",
-            "KUBERNETES_SERVICE_PORT",
-        ]
-        if any(k in os.environ for k in k8s_indicators):
-            info["docker"] = True
-            info["runtime"] = "kubernetes"
-
-    # ── Check 3: cgroup v1 (Docker container ID path) ─────────
-    if not info["docker"]:
-        try:
-            with open("/proc/self/cgroup") as f:
-                for line in f:
-                    for p in line.strip().split("/"):
-                        if len(p) >= 12 and all(
-                            c in "0123456789abcdef" for c in p[:12]
-                        ):
-                            info["docker"] = True
-                            info["container_id_short"] = p[:12]
-                            break
-        except FileNotFoundError:
-            pass
-
-    # ── Check 4: cgroup v2 (Kubernetes pod annotations) ───────
-    if not info["docker"]:
-        try:
-            with open("/proc/self/mountinfo") as f:
-                for line in f:
-                    for p in line.split():
-                        if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
-                            info["docker"] = True
-                            info["container_id_short"] = p[:12]
-                            break
-        except FileNotFoundError:
-            pass
-
-    # ── Check 5: /run/secrets/kubernetes.io (kube pod) ────────
-    if not info["docker"]:
-        if os.path.exists("/run/secrets/kubernetes.io"):
-            info["docker"] = True
-            info["runtime"] = "kubernetes"
-
-    if info["docker"]:
-        cid = str(info.get("container_id_short", ""))
-        if cid:
-            try:
-                result = subprocess.run(
-                    ["docker", "inspect", "--format={{.Config.Image}}", cid],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    info["docker_image"] = result.stdout.strip()
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
-
-    return info
 
 
 # ──────────────────────────────────────────────
@@ -408,7 +329,7 @@ def capture_environment(
     @log_environment.  Call directly for script-based logging.
 
     Returns dict with keys: git_commit, git_url, git_branch, hardware,
-    docker, frozen_requirements, user_run_id, user_tags.
+    frozen_requirements, user_run_id, user_tags.
     """
     import mlflow
 
@@ -479,16 +400,6 @@ def capture_environment(
         log.warning("[capture_environment] Hardware detection failed: %s", e)
         result["hardware"] = {}
 
-    # ── Docker ────────────────────────────────────────────────
-    try:
-        result["docker"] = _detect_docker()
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] Docker detection failed: %s", e)
-        result["docker"] = {}
-
     # ── Seeds ─────────────────────────────────────────────────
     try:
         result["seeds"] = _detect_seeds()
@@ -525,7 +436,6 @@ def capture_environment(
     # ── Log params ────────────────────────────────────────────
     all_params: dict[str, str | float | int] = {
         **result.get("hardware", {}),  # type: ignore
-        **result.get("docker", {}),  # type: ignore
         **result.get("pytorch", {}),  # type: ignore
     }
     if all_params:
