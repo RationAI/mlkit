@@ -149,6 +149,54 @@ def _read_cpu_max() -> float | None:
         return None
 
 
+def _extract_container_id() -> str | None:
+    """Extract container ID from cgroup files.
+
+    Tries multiple sources: cgroup v1 (Docker), cgroup v2 (K8s/pod UUID).
+    Returns hex hash (64-char for Docker, 36-char UUID for K8s) or None.
+    """
+    # ── Source 1: /proc/self/cgroup (cgroup v1 - Docker ID) ───
+    try:
+        with open("/proc/self/cgroup") as f:
+            for line in f:
+                parts = line.strip().split("/")
+                for p in parts:
+                    # Docker: 64-char hex
+                    if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
+                        return p
+                    # K8s/pod: UUID format (8-4-4-4-12)
+                    if (
+                        len(p) == 36
+                        and p[8] == "-"
+                        and p[13] == "-"
+                        and p[18] == "-"
+                        and p[23] == "-"
+                    ):
+                        return p
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    # ── Source 2: /proc/self/mountinfo (cgroup v2 - pod UUID) ─
+    try:
+        with open("/proc/self/mountinfo") as f:
+            for line in f:
+                for p in line.split():
+                    if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
+                        return p
+                    if (
+                        len(p) == 36
+                        and p[8] == "-"
+                        and p[13] == "-"
+                        and p[18] == "-"
+                        and p[23] == "-"
+                    ):
+                        return p
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    return None
+
+
 def _detect_hardware() -> dict[str, str | int | float]:
     """Detect CPU/GPU/hardware info.
 
@@ -172,6 +220,11 @@ def _detect_hardware() -> dict[str, str | int | float]:
     # ── K8s resources (no-op outside container) ──────────────
     k8s_resources = _detect_k8s_resources()
     info.update(k8s_resources)
+
+    # ── Container ID (no-op outside container) ───────────────
+    container_id = _extract_container_id()
+    if container_id:
+        info["container_id"] = container_id
 
     return info
 
