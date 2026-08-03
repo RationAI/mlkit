@@ -149,48 +149,61 @@ def _read_cpu_max() -> float | None:
         return None
 
 
-def _extract_container_id() -> str | None:
-    """Extract container ID from cgroup files.
+_HEX64 = set("0123456789abcdef")
 
-    Tries multiple sources: cgroup v1 (Docker), cgroup v2 (K8s/pod UUID).
-    Returns hex hash (64-char for Docker, 36-char UUID for K8s) or None.
+
+def _is_hex64(s: str) -> bool:
+    return len(s) == 64 and all(c in _HEX64 for c in s)
+
+
+def _extract_container_id() -> str | None:
+    """Extract container ID from cgroup / mountinfo files.
+
+    Tries multiple sources covering Docker (cgroup v1/v2) and K8s/containerd:
+      - /proc/self/cgroup        → docker-<id>.scope, cri-containerd-<id>
+      - /proc/self/mountinfo     → /docker/containers/<id>/, standalone <id>
+    Returns 64-char hex ID (Docker/containerd) or None outside container.
     """
-    # ── Source 1: /proc/self/cgroup (cgroup v1 - Docker ID) ───
+    # ── Source 1: /proc/self/cgroup ─────────────────────────────
     try:
         with open("/proc/self/cgroup") as f:
-            for line in f:
-                parts = line.strip().split("/")
-                for p in parts:
-                    # Docker: 64-char hex
-                    if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
-                        return p
-                    # K8s/pod: UUID format (8-4-4-4-12)
-                    if (
-                        len(p) == 36
-                        and p[8] == "-"
-                        and p[13] == "-"
-                        and p[18] == "-"
-                        and p[23] == "-"
-                    ):
-                        return p
+            content = f.read()
+        import re
+
+        # cgroup v1: docker/<64-hex> or cri-containerd-<64-hex>
+        m = re.search(r"cri-containerd-([0-9a-f]{64})", content)
+        if m:
+            return m.group(1)
+        m = re.search(r"docker-([0-9a-f]{64})\\.scope", content)
+        if m:
+            return m.group(1)
+
+        # cgroup v2 paths may embed the ID in scope names
+        for part in content.split("/"):
+            if _is_hex64(part):
+                return part
     except (FileNotFoundError, PermissionError):
         pass
 
-    # ── Source 2: /proc/self/mountinfo (cgroup v2 - pod UUID) ─
+    # ── Source 2: /proc/self/mountinfo ─────────────────────────
     try:
         with open("/proc/self/mountinfo") as f:
-            for line in f:
-                for p in line.split():
-                    if len(p) == 64 and all(c in "0123456789abcdef" for c in p):
-                        return p
-                    if (
-                        len(p) == 36
-                        and p[8] == "-"
-                        and p[13] == "-"
-                        and p[18] == "-"
-                        and p[23] == "-"
-                    ):
-                        return p
+            content = f.read()
+        import re
+
+        # Docker: /docker/containers/<64-hex>/resolv.conf ...
+        m = re.search(r"/docker/containers/([0-9a-f]{64})/", content)
+        if m:
+            return m.group(1)
+
+        # containerd/K8s: cri-containerd-<64-hex>.scope in mount paths
+        m = re.search(r"cri-containerd-([0-9a-f]{64})", content)
+        if m:
+            return m.group(1)
+
+        # Fallback: any standalone 64-char hex token
+        for part in re.findall(r"[0-9a-f]{64}", content):
+            return part
     except (FileNotFoundError, PermissionError):
         pass
 
