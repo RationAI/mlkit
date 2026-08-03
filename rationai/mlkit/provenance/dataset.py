@@ -55,11 +55,9 @@ def build_dataset_prov(
     version: str,
     dataset_root: str,
     num_samples: int,
+    num_positive: int,
+    num_negative: int,
     file_sizes: dict[str, int],
-    *,
-    num_positive: int | None = None,
-    num_negative: int | None = None,
-    class_distribution: dict[str, int] | None = None,
     manifest_path: str | None = None,
     prov_prefixes: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -69,12 +67,6 @@ def build_dataset_prov(
     registration activity and metadata bundle.  Reads user info from
     the active MLflow run's tags to create an agent and associate it
     via ``prov:wasAssociatedWith``.
-
-    Args:
-        class_distribution: Optional label → count mapping (universal).
-            Takes precedence over *num_positive*/*num_negative* when set.
-        num_positive, num_negative: Legacy binary classification counts.
-            Kept for backward compatibility with ``register_dataset``.
     """
     prefixes = prov_prefixes or get_prov_prefixes()
 
@@ -153,12 +145,8 @@ def build_dataset_prov(
     meta_entity["gen:dataset_version"] = _typed_value(version)
     meta_entity["gen:dataset_root"] = _typed_value(dataset_root)
     meta_entity["gen:num_samples"] = _typed_value(str(num_samples))
-    if class_distribution is not None:
-        meta_entity["gen:class_distribution"] = [json.dumps(class_distribution)]
-    if num_positive is not None:
-        meta_entity["gen:num_positive"] = _typed_value(str(num_positive))
-    if num_negative is not None:
-        meta_entity["gen:num_negative"] = _typed_value(str(num_negative))
+    meta_entity["gen:num_positive"] = _typed_value(str(num_positive))
+    meta_entity["gen:num_negative"] = _typed_value(str(num_negative))
     if manifest_path:
         meta_entity["gen:manifest_path"] = _typed_value(manifest_path)
 
@@ -494,21 +482,15 @@ def register_dataset(
         )
 
         # ── PROV-O document ────────────────────────────────
-        label_counts: dict[str, int] = {}
-        for s in samples:
-            lbl = str(s["label"])
-            label_counts[lbl] = label_counts.get(lbl, 0) + 1
-
         prov_doc = build_dataset_prov(
             run_id=run_id,
             dataset_name=dataset_name,
             version=version,
             dataset_root=dataset_dir,
             num_samples=len(samples),
+            num_positive=sum(1 for s in samples if s["label"] == 1),
+            num_negative=sum(1 for s in samples if s["label"] == 0),
             file_sizes=file_sizes,
-            num_positive=label_counts.get("1", 0),
-            num_negative=label_counts.get("0", 0),
-            class_distribution=label_counts,
             manifest_path=manifest_path,
         )
 
