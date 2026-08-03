@@ -239,6 +239,14 @@ def _detect_hardware() -> dict[str, str | int | float]:
     if container_id:
         info["container_id"] = container_id
 
+    # ── OMP_NUM_THREADS ──────────────────────────────────────
+    omp_threads = os.environ.get("OMP_NUM_THREADS")
+    if omp_threads is not None:
+        try:
+            info["omp_num_threads"] = int(omp_threads)
+        except ValueError:
+            pass
+
     return info
 
 
