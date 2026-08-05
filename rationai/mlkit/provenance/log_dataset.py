@@ -1,15 +1,9 @@
-"""One-shot dataset provenance logger.
-
-All-in-one helper that captures environment, logs metadata params/tags, and
-builds the PROV-O document — collapsing ~50 lines of boilerplate into a
-single call inside your ``main()``.
-"""
-
 from __future__ import annotations
 
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,40 +28,7 @@ def log_dataset_provenance(
     label_column: str = "annot_path",
     snapshot_env: bool = True,
 ) -> dict[str, Any]:
-    """Log dataset metadata + PROV document to the active MLflow run.
-
-    This is a convenience wrapper that handles:
-      1. ``capture_environment(snapshot_env=...)``
-      2. Logging ``num_samples``, ``num_positive``, ``num_negative`` as params
-      3. Logging ``dataset_name``, ``version``, ``file_sizes`` as tags
-      4. Building and uploading the PROV-O document as an artifact
-
-    Args:
-        dataset: The dataset DataFrame (must have *path_column* for file
-            paths and *label_column* for positive/negative labels).
-        logger: MLFlowLogger instance from ``autolog``.
-        config: Hydra DictConfig.
-        dataset_name: Name of the dataset for provenance tags.
-        version: Dataset version string.
-        positive_label: The sentinel value that indicates a negative sample
-            (e.g. ``"NEGATIVE"`` — samples **not** equal to this are positive).
-        path_column: Column name containing absolute file paths.
-        label_column: Column name containing the label (positive/negative).
-        snapshot_env: Whether to capture pip freeze snapshot.
-
-    Returns:
-        Dict with ``prov_doc``, ``num_samples``, ``num_positive``,
-        ``num_negative``, ``file_sizes`` for downstream use.
-
-    Example:
-        >>> from rationai.mlkit.provenance import log_dataset_provenance
-        >>>
-        >>> @autolog
-        >>> def main(config, logger):
-        >>>     dataset = create_dataset(...)
-        >>>     output_path = ...  # save csv, log artifact
-        >>>     log_dataset_provenance(dataset, logger, config)
-    """
+    """Log dataset metadata + PROV document + CSV manifest to active MLflow run."""
     # ── Environment ────────────────────────────────────────
     capture_environment(snapshot_env=snapshot_env)
 
@@ -77,11 +38,33 @@ def log_dataset_provenance(
     num_negative = num_samples - num_positive
 
     file_sizes: dict[str, int] = {}
+    file_mtimes: dict[str, str] = {}
+    manifest_rows: list[dict[str, Any]] = []
+
     for _, row in dataset.iterrows():
-        slide_path: str = str(row[path_column])
-        basename = os.path.basename(slide_path)
-        fpath = Path(slide_path)
-        file_sizes[basename] = int(fpath.stat().st_size) if fpath.exists() else -1
+        slide_path_str: str = str(row[path_column])
+        basename = os.path.basename(slide_path_str)
+        fpath = Path(slide_path_str)
+
+        if fpath.exists():
+            stat = fpath.stat()
+            size = int(stat.st_size)
+            mtime_iso = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+        else:
+            size = -1
+            mtime_iso = "unknown"
+
+        file_sizes[basename] = size
+        file_mtimes[basename] = mtime_iso
+
+        manifest_rows.append(
+            {
+                "filename": basename,
+                "path": slide_path_str,
+                "size_bytes": size,
+                "modified_at": mtime_iso,
+            }
+        )
 
     # ── Log params + tags ──────────────────────────────────
     mlflow.log_params(
@@ -95,7 +78,6 @@ def log_dataset_provenance(
         {
             "dataset_name": dataset_name,
             "version": version,
-            "file_sizes": json.dumps(file_sizes),
         }
     )
 
@@ -118,13 +100,23 @@ def log_dataset_provenance(
         file_sizes=file_sizes,
     )
 
-    # ── Upload PROV artifact ───────────────────────────────
+    # ── Upload Artefacts (PROV JSON + CSV Manifest) ────────
     with tempfile.TemporaryDirectory() as tmpdir:
         prov_dir = Path(tmpdir) / "provenance"
         prov_dir.mkdir(exist_ok=True)
+
+        # 1. PROV-O JSON document
         prov_path = prov_dir / "prov.json"
-        prov_path.write_text(json.dumps(prov_doc, indent=2))
+        prov_path.write_text(json.dumps(prov_doc, indent=2), encoding="utf-8")
+
+        # 2. Dataset Manifest jako CSV tabulka
+        manifest_df = pd.DataFrame(manifest_rows)
+        manifest_csv_path = prov_dir / "dataset_manifest.csv"
+        manifest_df.to_csv(manifest_csv_path, index=False)
+
+        # Nahrajeme soubory do MLflow
         logger.log_artifact(str(prov_path), artifact_path="provenance")
+        logger.log_artifact(str(manifest_csv_path), artifact_path="provenance")
 
     return {
         "prov_doc": prov_doc,
@@ -132,4 +124,5 @@ def log_dataset_provenance(
         "num_positive": num_positive,
         "num_negative": num_negative,
         "file_sizes": file_sizes,
+        "file_mtimes": file_mtimes,
     }
