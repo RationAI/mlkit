@@ -67,6 +67,8 @@ def log_dataset_provenance(
                 "modified_at": mtime_iso,
             }
         )
+        print(f"Manifest row added for {basename}: {manifest_rows[-1]}")
+        print(manifest_rows[0])
 
     # ── Log params + tags ──────────────────────────────────
     mlflow.log_params(
