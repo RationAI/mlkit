@@ -200,8 +200,15 @@ def _snapshot_environment(artifact_dir: str) -> str:
     """Freeze environment to *artifact_dir* and return the pip-freeze text."""
     req_path = os.path.join(artifact_dir, "requirements_frozen.txt")
     with open(req_path, "w") as f:
-        result = subprocess.run(["uv", "pip", "freeze", "--system"], capture_output=True, text=True)
-        f.write(result.stdout)
+        import importlib.metadata
+        pkgs = []
+        for dist in importlib.metadata.distributions():
+            name = dist.name or dist.metadata.get("Name")
+            version = dist.version
+            if name and version:
+                pkgs.append(f"{name}=={version}")
+        output_text = "\n".join(sorted(pkgs))
+        f.write(output_text + "\n")
 
     for src in ("pyproject.toml", "uv.lock"):
         if os.path.exists(src):
