@@ -271,8 +271,7 @@ def capture_environment(
     This is the core fn used by both EnvironmentCallback and
     @log_environment.  Call directly for script-based logging.
 
-    Returns dict with keys: git_commit, git_url, git_branch, hardware,
-    frozen_requirements, user_run_id, user_tags.
+    Returns dict with keys: hardware, frozen_requirements, user_run_id, user_tags.
     """
     import mlflow
 
@@ -298,25 +297,6 @@ def capture_environment(
         result["mlflow_version"] = mlflow.__version__
     except Exception:
         result["mlflow_version"] = "unknown"
-
-    # ── Git info ──────────────────────────────────────────────
-    try:
-        git_tags = _get_git_tags()
-        result["git_commit"] = git_tags.get(
-            "mlflow.source.git.commit", git_tags.get("git.commit", "unknown")
-        )
-        result["git_url"] = git_tags.get(
-            "mlflow.source.git.repoUrl", git_tags.get("git.repo_url", "unknown")
-        )
-        result["git_branch"] = git_tags.get(
-            "mlflow.source.git.branch", git_tags.get("git.branch", "unknown")
-        )
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] Git info failed: %s", e)
-        result.update(git_commit="unknown", git_url="unknown", git_branch="unknown")
 
     # ── User lookup ───────────────────────────────────────────
     try:
@@ -368,9 +348,6 @@ def capture_environment(
 
     env_tags.update(
         {
-            "git_commit": str(result.get("git_commit", "unknown")),
-            "git_url": str(result.get("git_url", "unknown")),
-            "git_branch": str(result.get("git_branch", "unknown")),
             "prov_start_time": datetime.now(UTC).isoformat(),
         }
     )

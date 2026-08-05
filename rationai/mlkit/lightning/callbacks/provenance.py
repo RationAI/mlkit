@@ -197,9 +197,6 @@ class ProvenanceCallback(Callback):
         self._split_data: dict[str, object] | None = None
         self._verification: dict[str, object] | None = None
         self._frozen_requirements: str | None = None
-        self._git_commit: str = "unknown"
-        self._git_url: str = "unknown"
-        self._git_branch: str = "unknown"
 
     # ── helpers ──────────────────────────────────────────────
 
@@ -212,9 +209,6 @@ class ProvenanceCallback(Callback):
 
         for cb in trainer.callbacks:
             if isinstance(cb, EnvironmentCallback):
-                self._git_commit = getattr(cb, "_git_commit", "unknown")
-                self._git_url = getattr(cb, "_git_url", "unknown")
-                self._git_branch = getattr(cb, "_git_branch", "unknown")
                 self._frozen_requirements = getattr(cb, "_frozen_requirements", None)
             elif isinstance(cb, DatasetVerificationCallback):
                 self._verification = getattr(cb, "_verification", None)
@@ -539,11 +533,6 @@ class ProvenanceCallback(Callback):
                 else None,
                 "dataset_verification": self._verification,
                 "requirements": self._frozen_requirements,
-                "source": {
-                    "git_commit": self._git_commit,
-                    "git_branch": self._git_branch,
-                    "git_remote": self._git_url,
-                },
             }
 
             with open(summary_path, "w") as f:

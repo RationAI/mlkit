@@ -223,10 +223,6 @@ def build_training_run_prov(
         if param_key in params and prov_key not in run_activity:
             run_activity[prov_key] = _typed_value(params[param_key])
 
-    git_url = tags.get("git_url", tags.get("mlflow.source.git.remote", ""))
-    if git_url:
-        run_activity["gen:git_remote"] = _typed_value(git_url)
-
     source_name = tags.get("mlflow.source.name", "")
     if source_name:
         run_activity["gen:source_name"] = _typed_value(source_name)
