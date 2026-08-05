@@ -98,12 +98,18 @@ def _detect_hardware() -> dict[str, str | int | float]:
     """
     info: dict[str, str | int | float] = {}
 
+    print("Detecting hardware...")
     if torch.cuda.is_available():
         info["gpu_name"] = torch.cuda.get_device_name(0)
+        print(f"Detected GPU: {info['gpu_name']}")
         info["gpu_count"] = torch.cuda.device_count()
+        print(f"Detected GPU count: {info['gpu_count']}")
         cap = torch.cuda.get_device_capability(0)
+        print(f"Detected GPU compute capability: {cap[0]}.{cap[1]}")
         info["gpu_compute_capability"] = f"{cap[0]}.{cap[1]}"
+        print(f"Detected CUDA version: {torch.version.cuda or 'unknown'}")
         info["cuda_version"] = torch.version.cuda or "unknown"
+        print(f"Detected GPU driver version: {torch.cuda.get_device_properties(0).driver_version}")
         info["gpu_driver_version"] = torch.cuda.get_device_properties(0).driver_version
     else:
         info["gpu_name"] = "none"
@@ -448,7 +454,7 @@ def capture_environment(
 def log_environment(
     skip_hardware: bool = False,
     snapshot_env: bool = True,
-    strict: bool = False,
+    strict: bool = True,
 ) -> Any:
     """Decorator that captures environment metadata before calling the wrapped function.
 
