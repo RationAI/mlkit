@@ -35,13 +35,12 @@ log = logging.getLogger(__name__)
 
 
 class EnvironmentCallback(Callback):
-    """Capture hardware, docker, git, user, and environment snapshot at training start.
+    """Capture hardware, docker, user, and environment snapshot at training start.
 
     Stores results on ``self`` so sibling callbacks (e.g. ``ProvenanceCallback``)
     can read them without duplicating work.
 
     Attributes set after ``on_fit_start``:
-        - ``_git_commit``, ``_git_url``, ``_git_branch``
         - ``_hardware`` (dict)
         - ``_pytorch`` (dict)
         - ``_docker`` (dict)
@@ -75,9 +74,6 @@ class EnvironmentCallback(Callback):
         self.strict = strict
 
         # Populated during on_fit_start
-        self._git_commit: str = "unknown"
-        self._git_url: str = "unknown"
-        self._git_branch: str = "unknown"
         self._hardware: dict[str, str | int] = {}
         self._pytorch: dict[str, str] = {}
         self._docker: dict[str, str | bool] = {}
@@ -109,9 +105,6 @@ class EnvironmentCallback(Callback):
         )
 
         # ── Populate instance fields for sibling callbacks ──────
-        self._git_commit = str(result.get("git_commit", "unknown"))
-        self._git_url = str(result.get("git_url", "unknown"))
-        self._git_branch = str(result.get("git_branch", "unknown"))
         self._user_run_id = result.get("user_run_id")  # type: ignore[assignment]
         self._user_tags = result.get("user_tags") or {}  # type: ignore[assignment]
         self._hardware = result.get("hardware") or {}  # type: ignore[assignment]

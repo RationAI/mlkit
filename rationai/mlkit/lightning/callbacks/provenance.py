@@ -236,28 +236,6 @@ class ProvenanceCallback(Callback):
             _snapshot_environment,
         )
 
-        # ── Git info (read from MLflow tags set by MLFlowLogger) ──
-        try:
-            run = mlflow.active_run()
-            run_tags: dict[str, str] = {}
-            if run and run.info and run.info.run_id:
-                client = mlflow.tracking.MlflowClient()
-                run_data = client.get_run(run.info.run_id)
-                run_tags = dict(run_data.data.tags) if run_data.data.tags else {}
-            self._git_commit = run_tags.get(
-                "mlflow.source.git.commit", run_tags.get("git.commit", "unknown")
-            )
-            self._git_url = run_tags.get(
-                "mlflow.source.git.repoUrl", run_tags.get("git.repo_url", "unknown")
-            )
-            self._git_branch = run_tags.get(
-                "mlflow.source.git.branch", run_tags.get("git.branch", "unknown")
-            )
-        except Exception as e:
-            if self.strict:
-                raise
-            log.warning("[ProvenanceCallback] Git info failed: %s", e)
-
         # ── User lookup ─────────────────────────────────────────
         try:
             user_run_id, user_tags = _lookup_user_run()
@@ -390,9 +368,6 @@ class ProvenanceCallback(Callback):
 
         tags.update(
             {
-                "git_commit": self._git_commit,
-                "git_url": self._git_url,
-                "git_branch": self._git_branch,
                 "prov_start_time": datetime.now(UTC).isoformat(),
             }
         )
