@@ -32,82 +32,45 @@ def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
 
     username = os.environ.get("MLFLOW_USER")
     if not username:
-        with contextlib.suppress(subprocess.CalledProcessError):
-            username = (
-                subprocess.check_output(
-                    ["git", "config", "user.name"],
-                    stderr=subprocess.DEVNULL,
-                )
-                .decode()
-                .strip()
-            )
-    if not username:
-        username = os.environ.get("USER", "unknown")
+        raise RuntimeError("MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running.")
 
     exp_id = _lookup_experiment("User_Registry")
     if exp_id is None:
-        return None, {}
+        raise RuntimeError("User_Registry experiment not found. Cannot lookup user run. Please ensure that the User_Registry experiment exists in MLflow.")
 
     _runs_df = mlflow.search_runs(experiment_ids=[exp_id])
     runs_df: pd.DataFrame = _runs_df  # search_runs may return RunList in old mlflow
     if runs_df.empty:
-        return None, {}
+        raise RuntimeError("No runs found for user. Cannot lookup user run. Please ensure that the User_Registry experiment has at exactly one run for your username.")
 
+    if "tags.username" not in runs_df.columns:
+        raise RuntimeError(f"No 'tags.username' column in User_Registry. No user runs tagged yet.")
     matched = runs_df[runs_df["tags.username"] == username]
+
     if matched.empty:
-        matched = runs_df.head(1)
+        raise RuntimeError(f"No run found for username '{username}' in User_Registry. Cannot lookup user run. Please ensure that the User_Registry experiment has exactly one run for your username.")
 
     row = matched.iloc[0]
     run_obj = mlflow.get_run(row.run_id)
     return row.run_id, dict(run_obj.data.tags)
 
-
 # ──────────────────────────────────────────────
 # Hardware detection
 # ──────────────────────────────────────────────
 
+def _read_ram_limit() -> dict[str, float | str]:
+    """Read RAM limit from cgroup files (Kubernetes)."""
+    CGROUP_UNLIMITED = 9223372036854771712
 
-def _detect_k8s_resources() -> dict[str, float]:
-    """Read CPU/memory limits from cgroup (v2 or v1) when on Kubernetes.
-
-    Returns dict with keys: cpu_limit, memory_limit_gb.
-    Empty dict if not in container or files unreadable.
-    """
-    info: dict[str, float] = {}
-
-    # ── Quick heuristic: only bother if K8s indicators present ──
-    is_k8s = any(
-        k in os.environ for k in ("KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT")
-    )
-    has_docker_env = os.path.exists("/.dockerenv")
-    has_k8s_secrets = os.path.exists("/run/secrets/kubernetes.io")
-
-    if not (is_k8s or has_docker_env or has_k8s_secrets):
-        return info
-
-    # ── CPU limit (cgroup v2) ────────────────────────────────
-    cpu_limit = _read_cpu_max()
-    if cpu_limit is not None:
-        info["cpu_limit"] = cpu_limit
-    else:
-        # ── CPU limit (cgroup v1) ────────────────────────────
-        cpu_quota = _read_file_float("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
-        cpu_period = _read_file_float("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
-        if cpu_quota is not None and cpu_period is not None and cpu_period > 0:
-            info["cpu_limit"] = round(cpu_quota / cpu_period, 2)
-
-    # ── Memory limit (cgroup v2) ─────────────────────────────
     mem_max = _read_file_int("/sys/fs/cgroup/memory.max")
-    if mem_max is not None and mem_max != 9223372036854771712:
-        info["memory_limit_gb"] = round(mem_max / 1e9, 2)
-    else:
-        # ── Memory limit (cgroup v1) ─────────────────────────
-        mem_limit = _read_file_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
-        if mem_limit is not None and mem_limit != 9223372036854771712:
-            info["memory_limit_gb"] = round(mem_limit / 1e9, 2)
+    if mem_max is None or mem_max >= CGROUP_UNLIMITED:
+        mem_max = _read_file_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
 
-    return info
+    if mem_max is not None and mem_max < CGROUP_UNLIMITED:
+        return {"memory_limit_gib": round(mem_max / (1024**3), 2)}
 
+    # Pokud limit není (běh mimo K8s / unlimited), zachováme klíč se známou hodnotou
+    return {"memory_limit_gib": "unlimited"}
 
 def _read_file_int(path: str) -> int | None:
     """Read a single integer from a file. Return None on failure."""
@@ -120,42 +83,6 @@ def _read_file_int(path: str) -> int | None:
     except (FileNotFoundError, ValueError, PermissionError):
         return None
 
-
-def _read_file_float(path: str) -> float | None:
-    """Read a single float from a file. Return None on failure."""
-    try:
-        with open(path) as f:
-            return float(f.read().strip())
-    except (FileNotFoundError, ValueError, PermissionError):
-        return None
-
-
-def _read_cpu_max() -> float | None:
-    """Parse /sys/fs/cgroup/cpu.max (cgroup v2).
-
-    Format: <limit> <period>  (e.g. '100000 100000' = 1 CPU)
-    'max' means unlimited → None.
-    """
-    try:
-        with open("/sys/fs/cgroup/cpu.max") as f:
-            parts = f.read().strip().split()
-            if len(parts) != 2 or parts[0] == "max":
-                return None
-            limit, period = int(parts[0]), int(parts[1])
-            if period <= 0:
-                return None
-            return round(limit / period, 2)
-    except (FileNotFoundError, ValueError, PermissionError):
-        return None
-
-
-_HEX64 = set("0123456789abcdef")
-
-
-def _is_hex64(s: str) -> bool:
-    return len(s) == 64 and all(c in _HEX64 for c in s)
-
-
 def _get_container_image() -> str | None:
     container_id = os.environ.get("DOCKER_IMAGE")
     if container_id:
@@ -163,12 +90,11 @@ def _get_container_image() -> str | None:
 
     return None
 
-
 def _detect_hardware() -> dict[str, str | int | float]:
     """Detect CPU/GPU/hardware info.
 
     When running in Kubernetes container, also logs resource limits
-    (cpu_limit, memory_limit_gb) from cgroup files.
+    (cpu_limit, memory_limit_gib) from cgroup files.
     """
     info: dict[str, str | int | float] = {}
 
@@ -178,17 +104,18 @@ def _detect_hardware() -> dict[str, str | int | float]:
         cap = torch.cuda.get_device_capability(0)
         info["gpu_compute_capability"] = f"{cap[0]}.{cap[1]}"
         info["cuda_version"] = torch.version.cuda or "unknown"
+        info["gpu_driver_version"] = torch.cuda.get_device_properties(0).driver_version
     else:
         info["gpu_name"] = "none"
+        info["gpu_count"] = 0
+        info["gpu_compute_capability"] = "n/a"
+        info["cuda_version"] = "n/a"
+        info["gpu_driver_version"] = "n/a"
 
     info["os_platform"] = platform.platform()
     info["python_version"] = platform.python_version()
 
-    # ── K8s resources (no-op outside container) ──────────────
-    k8s_resources = _detect_k8s_resources()
-    info.update(k8s_resources)
-
-    # ── Container ID (no-op outside container) ───────────────
+    # ── Container Image (no-op outside container) ───────────────
     container_image = _get_container_image()
     if container_image:
         info["container_image"] = container_image
@@ -197,18 +124,35 @@ def _detect_hardware() -> dict[str, str | int | float]:
     omp_threads = os.environ.get("OMP_NUM_THREADS")
     if omp_threads is not None:
         try:
-            info["omp_num_threads"] = int(omp_threads)
+            info["cpu_requested"] = int(omp_threads)
         except ValueError:
             pass
 
+    # ── CPU/memory limits (K8s) ───────────────────────────────
+    info.update(_read_ram_limit())
+
     return info
 
+def _detect_image_libraries() -> dict[str, str]:
+    info = {}
+    try:
+        import pyvips
+        info["libvips_version"] = f"{pyvips.version(0)}.{pyvips.version(1)}.{pyvips.version(2)}"
+    except ImportError:
+        info["libvips_version"] = "not_installed"
+
+    try:
+        import openslide
+        info["openslide_version"] = openslide.__version__
+    except ImportError:
+        info["openslide_version"] = "not_installed"
+
+    return info
 
 def _detect_pytorch() -> dict[str, str]:
     """Detect PyTorch build details for GPU reproducibility."""
     info: dict[str, str] = {}
     info["torch_version"] = torch.__version__
-    info["torch_git_version"] = torch.version.git_version or "unknown"
 
     if torch.cuda.is_available():
         info["cuda_runtime"] = torch.version.cuda or "unknown"
@@ -223,7 +167,6 @@ def _detect_pytorch() -> dict[str, str]:
         info["cudnn_enabled"] = "n/a"
 
     return info
-
 
 def _detect_seeds() -> dict[str, str]:
     """Read random seed state from environment/config."""
@@ -455,10 +398,21 @@ def capture_environment(
     )
     mlflow.set_tags(env_tags)
 
+    # ── Image libraries ─────────────────────────────────────────
+    try:
+        result["image_libraries"] = _detect_image_libraries()
+    except Exception as e:
+        if strict:
+            raise
+        log = logging.getLogger(__name__)
+        log.warning("[capture_environment] Image library detection failed: %s", e)
+        result["image_libraries"] = {}
+
     # ── Log params ────────────────────────────────────────────
     all_params: dict[str, str | float | int] = {
         **result.get("hardware", {}),  # type: ignore
         **result.get("pytorch", {}),  # type: ignore
+        **result.get("image_libraries", {}),  # type: ignore
     }
     if all_params:
         mlflow.log_params(all_params)
@@ -483,6 +437,9 @@ def capture_environment(
                 raise
             log = logging.getLogger(__name__)
             log.warning("[capture_environment] Environment snapshot failed: %s", e)
+        finally:
+            shutil.rmtree(artifact_dir, ignore_errors=True)
+
     result["frozen_requirements"] = frozen_requirements
 
     return result
