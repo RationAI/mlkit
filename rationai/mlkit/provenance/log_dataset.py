@@ -50,6 +50,8 @@ def log_dataset_provenance(
             stat = fpath.stat()
             size = int(stat.st_size)
             mtime_iso = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+            print(f"File: {basename}, Size: {size} bytes, Modified: {mtime_iso}")
+            print(f"Modification time (raw): {stat.st_mtime}")
         else:
             size = -1
             mtime_iso = "unknown"
