@@ -49,9 +49,7 @@ def log_dataset_provenance(
         if fpath.exists():
             stat = fpath.stat()
             size = int(stat.st_size)
-            mtime_iso = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
-            print(f"File: {basename}, Size: {size} bytes, Modified: {mtime_iso}")
-            print(f"Modification time (raw): {stat.st_mtime}")
+            mtime_iso = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         else:
             size = -1
             mtime_iso = "unknown"
@@ -67,8 +65,6 @@ def log_dataset_provenance(
                 "modified_at": mtime_iso,
             }
         )
-        print(f"Manifest row added for {basename}: {manifest_rows[-1]}")
-        print(manifest_rows[0])
 
     # ── Log params + tags ──────────────────────────────────
     mlflow.log_params(
