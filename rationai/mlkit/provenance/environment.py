@@ -200,7 +200,7 @@ def _snapshot_environment(artifact_dir: str) -> str:
     """Freeze environment to *artifact_dir* and return the pip-freeze text."""
     req_path = os.path.join(artifact_dir, "requirements_frozen.txt")
     with open(req_path, "w") as f:
-        subprocess.run(["uv", "pip", "freeze"], stdout=f, check=True)
+        subprocess.run(["uv", "pip", "freeze", "--system"], stdout=f, check=True)
 
     for src in ("pyproject.toml", "uv.lock"):
         if os.path.exists(src):
@@ -217,52 +217,18 @@ def _snapshot_system_packages(artifact_dir: str) -> None:
 
     Writes one of:
       - ``system_packages.txt`` (dpkg, Debian/Ubuntu)
-      - ``system_packages_rpm.txt`` (rpm, RHEL/Fedora)
-      - ``system_packages_apk.txt`` (apk, Alpine)
     """
     # ── Debian/Ubuntu (dpkg) ─────────────────────────────────
     try:
         dpkg_path = os.path.join(artifact_dir, "system_packages.txt")
         result = subprocess.run(
-            ["dpkg", "--get-selections"],
+            ["dpkg-query", "-W", "-f=${Package}=${Version}\n"],
             capture_output=True,
             text=True,
             timeout=10,
         )
         if result.returncode == 0 and result.stdout.strip():
             with open(dpkg_path, "w") as f:
-                f.write(result.stdout)
-            return
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    # ── RHEL/Fedora (rpm) ────────────────────────────────────
-    try:
-        rpm_path = os.path.join(artifact_dir, "system_packages_rpm.txt")
-        result = subprocess.run(
-            ["rpm", "-qa", "--qf", "%{NAME}-%{VERSION}-%{RELEASE}\n"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            with open(rpm_path, "w") as f:
-                f.write(result.stdout)
-            return
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    # ── Alpine (apk) ─────────────────────────────────────────
-    try:
-        apk_path = os.path.join(artifact_dir, "system_packages_apk.txt")
-        result = subprocess.run(
-            ["apk", "list", "--installed"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            with open(apk_path, "w") as f:
                 f.write(result.stdout)
             return
     except (subprocess.TimeoutExpired, FileNotFoundError):
