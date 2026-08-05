@@ -156,56 +156,10 @@ def _is_hex64(s: str) -> bool:
     return len(s) == 64 and all(c in _HEX64 for c in s)
 
 
-def _extract_container_id() -> str | None:
-    """Extract container ID from cgroup / mountinfo files.
-
-    Tries multiple sources covering Docker (cgroup v1/v2) and K8s/containerd:
-      - /proc/self/cgroup        → docker-<id>.scope, cri-containerd-<id>
-      - /proc/self/mountinfo     → /docker/containers/<id>/, standalone <id>
-    Returns 64-char hex ID (Docker/containerd) or None outside container.
-    """
-    # ── Source 1: /proc/self/cgroup ─────────────────────────────
-    try:
-        with open("/proc/self/cgroup") as f:
-            content = f.read()
-        import re
-
-        # cgroup v1: docker/<64-hex> or cri-containerd-<64-hex>
-        m = re.search(r"cri-containerd-([0-9a-f]{64})", content)
-        if m:
-            return m.group(1)
-        m = re.search(r"docker-([0-9a-f]{64})\\.scope", content)
-        if m:
-            return m.group(1)
-
-        # cgroup v2 paths may embed the ID in scope names
-        for part in content.split("/"):
-            if _is_hex64(part):
-                return part
-    except (FileNotFoundError, PermissionError):
-        pass
-
-    # ── Source 2: /proc/self/mountinfo ─────────────────────────
-    try:
-        with open("/proc/self/mountinfo") as f:
-            content = f.read()
-        import re
-
-        # Docker: /docker/containers/<64-hex>/resolv.conf ...
-        m = re.search(r"/docker/containers/([0-9a-f]{64})/", content)
-        if m:
-            return m.group(1)
-
-        # containerd/K8s: cri-containerd-<64-hex>.scope in mount paths
-        m = re.search(r"cri-containerd-([0-9a-f]{64})", content)
-        if m:
-            return m.group(1)
-
-        # Fallback: any standalone 64-char hex token
-        for part in re.findall(r"[0-9a-f]{64}", content):
-            return part
-    except (FileNotFoundError, PermissionError):
-        pass
+def _get_container_image() -> str | None:
+    container_id = os.environ.get("DOCKER_IMAGE")
+    if container_id:
+        return container_id
 
     return None
 
@@ -235,9 +189,9 @@ def _detect_hardware() -> dict[str, str | int | float]:
     info.update(k8s_resources)
 
     # ── Container ID (no-op outside container) ───────────────
-    container_id = _extract_container_id()
-    if container_id:
-        info["container_id"] = container_id
+    container_image = _get_container_image()
+    if container_image:
+        info["container_image"] = container_image
 
     # ── OMP_NUM_THREADS ──────────────────────────────────────
     omp_threads = os.environ.get("OMP_NUM_THREADS")
@@ -289,12 +243,6 @@ def _detect_seeds() -> dict[str, str]:
         info["random_state"] = str(random.getrandbits(32))
 
     return info
-
-
-# ──────────────────────────────────────────────
-# Docker detection
-# ──────────────────────────────────────────────
-
 
 # ──────────────────────────────────────────────
 # Environment snapshot
