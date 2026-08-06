@@ -26,6 +26,17 @@ from rationai.mlkit.provenance.common import (
 from rationai.mlkit.provenance.environment import capture_environment
 
 
+def _to_native(obj: Any) -> Any:
+    """Recursively convert numpy/pandas scalars to native Python types."""
+    if hasattr(obj, "item"):  # numpy scalars
+        return obj.item()
+    if isinstance(obj, dict):
+        return {k: _to_native(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_native(v) for v in obj]
+    return obj
+
+
 def log_split_provenance(
     splits: dict[str, pd.DataFrame],
     logger: MLFlowLogger,
@@ -98,7 +109,7 @@ def log_split_provenance(
         {
             "dataset_name": dataset_name,
             "version": version,
-            "split_stats": json.dumps(split_stats),
+            "split_stats": json.dumps(_to_native(split_stats)),
         }
     )
 
@@ -123,7 +134,9 @@ def log_split_provenance(
         prov_dir.mkdir(exist_ok=True)
 
         prov_path = prov_dir / "prov.json"
-        prov_path.write_text(json.dumps(prov_doc, indent=2), encoding="utf-8")
+        prov_path.write_text(
+            json.dumps(_to_native(prov_doc), indent=2), encoding="utf-8"
+        )
 
         logger.log_artifact(str(prov_path), artifact_path="provenance")
 
