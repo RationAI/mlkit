@@ -22,6 +22,7 @@ from rationai.mlkit.provenance.environment import (
     log_environment,
 )
 from rationai.mlkit.provenance.log_dataset import log_dataset_provenance
+from rationai.mlkit.provenance.log_split import log_split_provenance
 from rationai.mlkit.provenance.run import build_training_run_prov
 from rationai.mlkit.provenance.user import (
     build_user_prov,
@@ -36,6 +37,7 @@ __all__ = [
     "capture_environment",
     "log_dataset_provenance",
     "log_environment",
+    "log_split_provenance",
     "register_dataset",
     "register_new_user",
     "verify_dataset",
