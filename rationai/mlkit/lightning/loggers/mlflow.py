@@ -59,7 +59,10 @@ class MLFlowLogger(loggers.MLFlowLogger, StreamLogger):
     def experiment(self) -> MlflowClient:
         if not self._initialized:
             exp = super().experiment
+            # Resume the run in the fluent API context so callbacks can use
+            # mlflow.log_params, mlflow.log_artifacts, etc.
             mlflow.start_run(self.run_id, log_system_metrics=self.log_system_metrics)
+            self._initialized = True
             return exp
 
         return super().experiment
