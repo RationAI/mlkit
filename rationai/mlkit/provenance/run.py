@@ -7,17 +7,20 @@ MLflow params/tags to PROV properties.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rationai.mlkit.provenance.common import (
-    _iso_timestamp,
-    _qualified,
-    _qualified_name,
-    _safe_id,
-    _typed_value,
     get_prov_prefixes,
+    iso_timestamp,
+    qualified,
+    qualified_name,
+    safe_id,
+    typed_value,
 )
 
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # ──────────────────────────────────────────────
 # Hyperparameter keys that surface on the activity
@@ -54,65 +57,52 @@ _WSI_PARAM_KEYS: set[str] = {
     "slicing_method",
 }
 
-
 # ──────────────────────────────────────────────
-# PROV document builder
+# Section builders (all mutate the shared section dicts)
 # ──────────────────────────────────────────────
 
 
-def build_training_run_prov(
-    run_id: str,
-    run_name: str,
-    params: dict[str, str],
-    metrics: dict[str, float],
-    tags: dict[str, str],
-    start_time_ms: int | None = None,
-    end_time_ms: int | None = None,
-    split_data: dict[str, object] | None = None,
-    requirements: str | None = None,
-    verification: dict[str, object] | None = None,
-    prov_prefixes: dict[str, str] | None = None,
-) -> dict[str, object]:
-    """Build an OpenProvenance-compatible PROV document for a training run."""
-    username = tags.get("username", tags.get("mlflow.user", "unknown"))
-    agent_local = _safe_id(f"user_{username}")
-    agent_id = _qualified("gen", agent_local)
+def _blank_rel_factory() -> Callable[[], str]:
+    """Return a generator of sequential blank-node relationship ids."""
+    counter = 0
 
-    run_act_local = _safe_id(f"run_{run_id}")
-    run_act_id = _qualified("gen", run_act_local)
-
-    meta_local = run_id
-    meta_id = _qualified("meta", meta_local)
-
-    main_act_local = f"TrainingRun_{run_id[:8]}"
-    main_act_id = _qualified("blank", main_act_local)
-
-    entities: dict[str, Any] = {}
-    activities: dict[str, Any] = {}
-    agents: dict[str, Any] = {}
-    used: dict[str, Any] = {}
-    was_associated_with: dict[str, Any] = {}
-
-    rel_counter = [0]
-
-    def _blank_rel_id() -> str:
-        rid = f"_:n{rel_counter[0]}"
-        rel_counter[0] += 1
+    def _next() -> str:
+        nonlocal counter
+        rid = f"_:n{counter}"
+        counter += 1
         return rid
 
-    # ── 1. AGENT ───────────────────────────────────────────
+    return _next
+
+
+def _add_agent(
+    agent_id: str,
+    username: str,
+    tags: dict[str, str],
+    agents: dict[str, Any],
+) -> None:
+    """Section 1 — the person running the training."""
     agent_props: dict[str, Any] = {}
     real_name = tags.get("real_name", username)
-    agent_props["schema:name"] = _typed_value(real_name)
+    agent_props["schema:name"] = typed_value(real_name)
     email = tags.get("mlflow.source.git.user.email", f"{username}@unknown")
-    agent_props["schema:email"] = _typed_value(email)
+    agent_props["schema:email"] = typed_value(email)
     org = tags.get("organization", "")
     if org:
-        agent_props["schema:affiliation"] = _typed_value(org)
-    agent_props["prov:type"] = [_qualified_name("schema", "Person")]
+        agent_props["schema:affiliation"] = typed_value(org)
+    agent_props["prov:type"] = [qualified_name("schema", "Person")]
     agents[agent_id] = agent_props
 
-    # ── 2. INPUT ENTITIES ──────────────────────────────────
+
+def _add_input_entities(
+    run_id: str,
+    run_act_id: str,
+    params: dict[str, str],
+    entities: dict[str, Any],
+    used: dict[str, Any],
+    blank_rel_id: Callable[[], str],
+) -> None:
+    """Section 2 — WSI input or fallback dataset entity, plus ``used``."""
     image_path_candidates = (
         params.get("image_path")
         or params.get("wsi_path")
@@ -122,14 +112,14 @@ def build_training_run_prov(
     )
 
     if image_path_candidates:
-        wsi_local = _safe_id(f"wsi_{image_path_candidates}")
-        wsi_id = _qualified("gen", wsi_local)
+        wsi_local = safe_id(f"wsi_{image_path_candidates}")
+        wsi_id = qualified("gen", wsi_local)
         wsi_props: dict[str, Any] = {
-            "schema:name": _typed_value(f"Input: {image_path_candidates}"),
-            "prov:type": [_qualified_name("sosa", "Sample")],
+            "schema:name": typed_value(f"Input: {image_path_candidates}"),
+            "prov:type": [qualified_name("sosa", "Sample")],
         }
         if "scanner" in params:
-            wsi_props["gen:scanner"] = _typed_value(params["scanner"])
+            wsi_props["gen:scanner"] = typed_value(params["scanner"])
         for pk, prov_key in [
             ("slide_id", "schema:identifier"),
             ("wsi_id", "schema:identifier"),
@@ -141,50 +131,60 @@ def build_training_run_prov(
             ("slicing_method", "gen:slicing_method"),
         ]:
             if pk in params:
-                wsi_props[prov_key] = _typed_value(params[pk])
+                wsi_props[prov_key] = typed_value(params[pk])
 
         entities[wsi_id] = wsi_props
-        used[_blank_rel_id()] = {
+        used[blank_rel_id()] = {
             "prov:activity": run_act_id,
             "prov:entity": wsi_id,
         }
     else:
         train_count = params.get("train_samples", "0")
         test_count = params.get("test_samples", "0")
-        ds_local = _safe_id(f"dataset_{run_id[:8]}")
-        ds_id = _qualified("gen", ds_local)
+        ds_local = safe_id(f"dataset_{run_id[:8]}")
+        ds_id = qualified("gen", ds_local)
         entities[ds_id] = {
-            "schema:name": _typed_value(
+            "schema:name": typed_value(
                 f"Training dataset ({train_count} train, {test_count} test)"
             ),
-            "prov:type": [_qualified_name("sosa", "Sample")],
+            "prov:type": [qualified_name("sosa", "Sample")],
         }
-        used[_blank_rel_id()] = {
+        used[blank_rel_id()] = {
             "prov:activity": run_act_id,
             "prov:entity": ds_id,
         }
 
-    # ── 3. RUN ACTIVITY ────────────────────────────────────
+
+def _add_run_activity(
+    run_act_id: str,
+    run_name: str,
+    params: dict[str, str],
+    tags: dict[str, str],
+    start_time_ms: int | None,
+    end_time_ms: int | None,
+    activities: dict[str, Any],
+) -> None:
+    """Section 3 — the training run itself (hyperparams, hardware, source)."""
     run_activity: dict[str, Any] = {}
-    run_activity["prov:type"] = [_qualified_name("schema", "Action")]
-    run_activity["prov:startTime"] = [_iso_timestamp(start_time_ms)]
-    run_activity["prov:endTime"] = [_iso_timestamp(end_time_ms)]
-    run_activity["schema:name"] = _typed_value(run_name)
+    run_activity["prov:type"] = [qualified_name("schema", "Action")]
+    run_activity["prov:startTime"] = [iso_timestamp(start_time_ms)]
+    run_activity["prov:endTime"] = [iso_timestamp(end_time_ms)]
+    run_activity["schema:name"] = typed_value(run_name)
 
     exp_name = params.get("model_name", "")
     if exp_name:
-        run_activity["gen:experiment_name"] = _typed_value(exp_name)
+        run_activity["gen:experiment_name"] = typed_value(exp_name)
 
     if "model_class" in params:
-        run_activity["gen:model_config"] = _typed_value(params["model_class"])
+        run_activity["gen:model_config"] = typed_value(params["model_class"])
 
     git_commit = tags.get("git_commit", tags.get("mlflow.source.git.commit", ""))
     if git_commit:
-        run_activity["schema:identifier"] = _typed_value(git_commit)
+        run_activity["schema:identifier"] = typed_value(git_commit)
 
     for key in ("pretrained_model", "backbone", "feature_extractor"):
         if key in params:
-            run_activity["gen:pretrained_model"] = _typed_value(params[key])
+            run_activity["gen:pretrained_model"] = typed_value(params[key])
 
     for key, prov_key in [
         ("dataset_name", "gen:dataset_name"),
@@ -193,17 +193,17 @@ def build_training_run_prov(
         ("split", "gen:data_split"),
     ]:
         if key in params:
-            run_activity[prov_key] = _typed_value(params[key])
+            run_activity[prov_key] = typed_value(params[key])
 
     for key in _ACTIVITY_HP_KEYS:
         if key in params:
-            run_activity[f"gen:{key}"] = _typed_value(params[key])
+            run_activity[f"gen:{key}"] = typed_value(params[key])
 
     for key, val in params.items():
         if key.startswith(("opt_", "sch_")):
             clean = key.removeprefix("opt_").removeprefix("sch_")
             if f"gen:{clean}" not in run_activity:
-                run_activity[f"gen:{clean}"] = _typed_value(val)
+                run_activity[f"gen:{clean}"] = typed_value(val)
 
     for tag_key, prov_key in [
         ("mlflow.gpu.count", "gen:gpu_count"),
@@ -212,7 +212,7 @@ def build_training_run_prov(
         ("mlflow.memory_gb", "gen:memory_gb"),
     ]:
         if tag_key in tags:
-            run_activity[prov_key] = _typed_value(tags[tag_key])
+            run_activity[prov_key] = typed_value(tags[tag_key])
 
     for param_key, prov_key in [
         ("gpu_count", "gen:gpu_count"),
@@ -221,27 +221,41 @@ def build_training_run_prov(
         ("ram_total_gb", "gen:memory_gb"),
     ]:
         if param_key in params and prov_key not in run_activity:
-            run_activity[prov_key] = _typed_value(params[param_key])
+            run_activity[prov_key] = typed_value(params[param_key])
 
     source_name = tags.get("mlflow.source.name", "")
     if source_name:
-        run_activity["gen:source_name"] = _typed_value(source_name)
+        run_activity["gen:source_name"] = typed_value(source_name)
 
     for key, prov_key in [
         ("segmentation", "gen:segmentation_config"),
         ("model", "gen:model_config"),
     ]:
         if key in params:
-            run_activity[prov_key] = _typed_value(params[key])
+            run_activity[prov_key] = typed_value(params[key])
 
     activities[run_act_id] = run_activity
 
-    # ── 4. CPM METADATA ENTITY ─────────────────────────────
+
+def _add_meta_entity(
+    meta_id: str,
+    run_act_id: str,
+    params: dict[str, str],
+    metrics: dict[str, float],
+    tags: dict[str, str],
+    split_data: dict[str, object] | None,
+    requirements: str | None,
+    verification: dict[str, object] | None,
+    entities: dict[str, Any],
+    was_generated_by: dict[str, Any],
+    blank_rel_id: Callable[[], str],
+) -> None:
+    """Section 4 — CPM metadata bundle (residual params, metrics, splits)."""
     meta_entity: dict[str, Any] = {}
-    meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
+    meta_entity["prov:type"] = [qualified_name("cpm", "BundleMetadata")]
     org_val = tags.get("organization", "")
     if org_val:
-        meta_entity["cpm:organization"] = _typed_value(org_val)
+        meta_entity["cpm:organization"] = typed_value(org_val)
 
     skip_keys = (
         set(_ACTIVITY_HP_KEYS)
@@ -275,28 +289,43 @@ def build_training_run_prov(
 
     for key, val in params.items():
         if key not in skip_keys:
-            safe_key = _safe_id(key)
-            meta_entity[f"gen:{safe_key}"] = _typed_value(val)
+            safe_key = safe_id(key)
+            meta_entity[f"gen:{safe_key}"] = typed_value(val)
 
     for key, mval in metrics.items():
-        safe_key = _safe_id(key)
-        meta_entity[f"gen:{safe_key}"] = _typed_value(mval)
+        safe_key = safe_id(key)
+        meta_entity[f"gen:{safe_key}"] = typed_value(mval)
 
     if split_data:
-        meta_entity["gen:split_test_size"] = _typed_value(
-            split_data.get("test_size", "0.2")
-        )
-        meta_entity["gen:split_random_state"] = _typed_value(
-            str(split_data.get("random_state", "42"))
-        )
-        meta_entity["gen:split_stratified"] = ["true"]
-
-        if split_data.get("train"):
-            meta_entity["gen:split_train"] = _typed_value(
-                json.dumps(split_data["train"])
+        if "splits" in split_data:
+            # Precomputed splits from a preprocessing pipeline — referenced,
+            # never recomputed.  Stats summary only (row/case counts, folds).
+            meta_entity["gen:split_source"] = typed_value(
+                str(split_data.get("source", "artifacts"))
             )
-        if split_data.get("test"):
-            meta_entity["gen:split_test"] = _typed_value(json.dumps(split_data["test"]))
+            meta_entity["gen:split_stats"] = [
+                json.dumps(split_data["splits"], default=str)
+            ]
+        else:
+            meta_entity["gen:split_source"] = typed_value(
+                str(split_data.get("source", "manifest_split"))
+            )
+            meta_entity["gen:split_test_size"] = typed_value(
+                split_data.get("test_size", "0.2")
+            )
+            meta_entity["gen:split_random_state"] = typed_value(
+                str(split_data.get("random_state", "42"))
+            )
+            meta_entity["gen:split_stratified"] = ["true"]
+
+            if split_data.get("train"):
+                meta_entity["gen:split_train"] = typed_value(
+                    json.dumps(split_data["train"])
+                )
+            if split_data.get("test"):
+                meta_entity["gen:split_test"] = typed_value(
+                    json.dumps(split_data["test"])
+                )
 
     if requirements:
         meta_entity["gen:requirements"] = [requirements]
@@ -323,20 +352,26 @@ def build_training_run_prov(
         "mlflow.note.content",
     ):
         if tag_key in tags:
-            safe_key = _safe_id(tag_key)
-            meta_entity[f"gen:{safe_key}"] = _typed_value(tags[tag_key])
+            safe_key = safe_id(tag_key)
+            meta_entity[f"gen:{safe_key}"] = typed_value(tags[tag_key])
 
     entities[meta_id] = meta_entity
 
-    was_generated_by: dict[str, Any] = {}
-    was_generated_by[_blank_rel_id()] = {
+    was_generated_by[blank_rel_id()] = {
         "prov:entity": meta_id,
         "prov:activity": run_act_id,
     }
 
-    # ── 5. CPM MAIN ACTIVITY ───────────────────────────────
+
+def _add_main_activity(
+    main_act_id: str,
+    meta_id: str,
+    run_act_id: str,
+    activities: dict[str, Any],
+) -> None:
+    """Section 5 — CPM main activity referencing the meta bundle."""
     main_activity: dict[str, Any] = {}
-    main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
+    main_activity["prov:type"] = [qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
         {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]
@@ -345,8 +380,62 @@ def build_training_run_prov(
     ]
     activities[main_act_id] = main_activity
 
+
+# ──────────────────────────────────────────────
+# PROV document builder
+# ──────────────────────────────────────────────
+
+
+def build_training_run_prov(
+    run_id: str,
+    run_name: str,
+    params: dict[str, str],
+    metrics: dict[str, float],
+    tags: dict[str, str],
+    start_time_ms: int | None = None,
+    end_time_ms: int | None = None,
+    split_data: dict[str, object] | None = None,
+    requirements: str | None = None,
+    verification: dict[str, object] | None = None,
+    prov_prefixes: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Build an OpenProvenance-compatible PROV document for a training run."""
+    username = tags.get("username", tags.get("mlflow.user", "unknown"))
+    agent_id = qualified("gen", safe_id(f"user_{username}"))
+    run_act_id = qualified("gen", safe_id(f"run_{run_id}"))
+    meta_id = qualified("meta", run_id)
+    main_act_id = qualified("blank", f"TrainingRun_{run_id[:8]}")
+
+    entities: dict[str, Any] = {}
+    activities: dict[str, Any] = {}
+    agents: dict[str, Any] = {}
+    used: dict[str, Any] = {}
+    was_associated_with: dict[str, Any] = {}
+    was_generated_by: dict[str, Any] = {}
+    blank_rel_id = _blank_rel_factory()
+
+    _add_agent(agent_id, username, tags, agents)
+    _add_input_entities(run_id, run_act_id, params, entities, used, blank_rel_id)
+    _add_run_activity(
+        run_act_id, run_name, params, tags, start_time_ms, end_time_ms, activities
+    )
+    _add_meta_entity(
+        meta_id,
+        run_act_id,
+        params,
+        metrics,
+        tags,
+        split_data,
+        requirements,
+        verification,
+        entities,
+        was_generated_by,
+        blank_rel_id,
+    )
+    _add_main_activity(main_act_id, meta_id, run_act_id, activities)
+
     # ── 6. RELATIONSHIPS ───────────────────────────────────
-    was_associated_with[_blank_rel_id()] = {
+    was_associated_with[blank_rel_id()] = {
         "prov:activity": run_act_id,
         "prov:agent": agent_id,
     }

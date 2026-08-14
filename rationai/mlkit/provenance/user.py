@@ -15,12 +15,12 @@ from typing import Any
 import mlflow
 
 from rationai.mlkit.provenance.common import (
-    _iso_timestamp,
-    _qualified,
-    _qualified_name,
-    _safe_id,
-    _typed_value,
     get_prov_prefixes,
+    iso_timestamp,
+    qualified,
+    qualified_name,
+    safe_id,
+    typed_value,
 )
 
 
@@ -46,17 +46,17 @@ def build_user_prov(
     """
     prefixes = prov_prefixes or get_prov_prefixes()
 
-    agent_local = _safe_id(f"user_{username}")
-    agent_id = _qualified("gen", agent_local)
+    agent_local = safe_id(f"user_{username}")
+    agent_id = qualified("gen", agent_local)
 
-    run_act_local = _safe_id(f"run_{run_id}")
-    run_act_id = _qualified("gen", run_act_local)
+    run_act_local = safe_id(f"run_{run_id}")
+    run_act_id = qualified("gen", run_act_local)
 
     meta_local = run_id
-    meta_id = _qualified("meta", meta_local)
+    meta_id = qualified("meta", meta_local)
 
     main_act_local = f"UserReg_{run_id[:8]}"
-    main_act_id = _qualified("blank", main_act_local)
+    main_act_id = qualified("blank", main_act_local)
 
     entities: dict[str, dict[str, Any]] = {}
     activities: dict[str, dict[str, Any]] = {}
@@ -71,42 +71,42 @@ def build_user_prov(
         rel_counter[0] += 1
         return rid
 
-    now = _iso_timestamp()
+    now = iso_timestamp()
 
     # ── AGENT ──────────────────────────────────────────────
     agent_props: dict[str, list[Any]] = {}
-    agent_props["schema:name"] = _typed_value(real_name)
-    agent_props["schema:email"] = _typed_value(email)
+    agent_props["schema:name"] = typed_value(real_name)
+    agent_props["schema:email"] = typed_value(email)
     if organization:
-        agent_props["schema:affiliation"] = _typed_value(organization)
-    agent_props["prov:type"] = [_qualified_name("schema", "Person")]
+        agent_props["schema:affiliation"] = typed_value(organization)
+    agent_props["prov:type"] = [qualified_name("schema", "Person")]
     agents[agent_id] = agent_props
 
     # ── ACTIVITY (the registration action) ────────────────
     run_activity: dict[str, Any] = {}
-    run_activity["prov:type"] = [_qualified_name("schema", "Action")]
+    run_activity["prov:type"] = [qualified_name("schema", "Action")]
     run_activity["prov:startTime"] = [now]
     run_activity["prov:endTime"] = [now]
-    run_activity["schema:name"] = _typed_value(f"Register user {real_name}")
+    run_activity["schema:name"] = typed_value(f"Register user {real_name}")
     activities[run_act_id] = run_activity
 
     # ── CPM METADATA ENTITY ───────────────────────────────
     meta_entity: dict[str, list[Any]] = {}
-    meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
-    meta_entity["gen:username"] = _typed_value(username)
-    meta_entity["gen:real_name"] = _typed_value(real_name)
-    meta_entity["gen:email"] = _typed_value(email)
+    meta_entity["prov:type"] = [qualified_name("cpm", "BundleMetadata")]
+    meta_entity["gen:username"] = typed_value(username)
+    meta_entity["gen:real_name"] = typed_value(real_name)
+    meta_entity["gen:email"] = typed_value(email)
     if organization:
-        meta_entity["gen:organization"] = _typed_value(organization)
+        meta_entity["gen:organization"] = typed_value(organization)
     if lead_name:
-        meta_entity["gen:lead_name"] = _typed_value(lead_name)
+        meta_entity["gen:lead_name"] = typed_value(lead_name)
     if lead_email:
-        meta_entity["gen:lead_email"] = _typed_value(lead_email)
+        meta_entity["gen:lead_email"] = typed_value(lead_email)
     entities[meta_id] = meta_entity
 
     # ── CPM MAIN ACTIVITY ────────────────────────────────
     main_activity: dict[str, Any] = {}
-    main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
+    main_activity["prov:type"] = [qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
         {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]

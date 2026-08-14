@@ -13,7 +13,11 @@ import platform
 import shutil
 import subprocess
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import torch
 
@@ -23,48 +27,62 @@ import torch
 # ──────────────────────────────────────────────
 
 
-def _lookup_user_run() -> tuple[str | None, dict[str, str]]:
+def lookup_user_run() -> tuple[str | None, dict[str, str]]:
     """Find the user run from User_Registry.  Auto-detect username."""
     import mlflow
     import pandas as pd
 
-    from rationai.mlkit.provenance.dataset import _lookup_experiment
+    from rationai.mlkit.provenance.dataset import lookup_experiment
 
     username = os.environ.get("MLFLOW_USER")
     if not username:
-        raise RuntimeError("MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running.")
+        raise RuntimeError(
+            "MLFLOW_USER environment variable not set. Cannot lookup user run. Please set MLFLOW_USER to your username (e.g. 'jdoe') before running."
+        )
 
-    exp_id = _lookup_experiment("User_Registry")
+    exp_id = lookup_experiment("User_Registry")
     if exp_id is None:
-        raise RuntimeError("User_Registry experiment not found. Cannot lookup user run. Please ensure that the User_Registry experiment exists in MLflow.")
+        raise RuntimeError(
+            "User_Registry experiment not found. Cannot lookup user run. Please ensure that the User_Registry experiment exists in MLflow."
+        )
 
-    _runs_df = mlflow.search_runs(experiment_ids=[exp_id])
-    runs_df: pd.DataFrame = _runs_df  # search_runs may return RunList in old mlflow
+    runs_df = cast(
+        "pd.DataFrame",
+        mlflow.search_runs(experiment_ids=[exp_id], output_format="pandas"),
+    )
     if runs_df.empty:
-        raise RuntimeError("No runs found for user. Cannot lookup user run. Please ensure that the User_Registry experiment has at exactly one run for your username.")
+        raise RuntimeError(
+            "No runs found for user. Cannot lookup user run. Please ensure that the User_Registry experiment has at exactly one run for your username."
+        )
 
     if "tags.username" not in runs_df.columns:
-        raise RuntimeError(f"No 'tags.username' column in User_Registry. No user runs tagged yet.")
+        raise RuntimeError(
+            "No 'tags.username' column in User_Registry. No user runs tagged yet."
+        )
     matched = runs_df[runs_df["tags.username"] == username]
 
     if matched.empty:
-        raise RuntimeError(f"No run found for username '{username}' in User_Registry. Cannot lookup user run. Please ensure that the User_Registry experiment has exactly one run for your username.")
+        raise RuntimeError(
+            f"No run found for username '{username}' in User_Registry. Cannot lookup user run. Please ensure that the User_Registry experiment has exactly one run for your username."
+        )
 
     row = matched.iloc[0]
     run_obj = mlflow.get_run(row.run_id)
     return row.run_id, dict(run_obj.data.tags)
 
+
 # ──────────────────────────────────────────────
 # Hardware detection
 # ──────────────────────────────────────────────
 
-def _read_ram_limit() -> dict[str, float | str]:
+
+def read_ram_limit() -> dict[str, float | str]:
     """Read RAM limit from cgroup files (Kubernetes)."""
     CGROUP_UNLIMITED = 9223372036854771712
 
-    mem_max = _read_file_int("/sys/fs/cgroup/memory.max")
+    mem_max = read_file_int("/sys/fs/cgroup/memory.max")
     if mem_max is None or mem_max >= CGROUP_UNLIMITED:
-        mem_max = _read_file_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+        mem_max = read_file_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
 
     if mem_max is not None and mem_max < CGROUP_UNLIMITED:
         return {"memory_limit_gib": round(mem_max / (1024**3), 2)}
@@ -72,7 +90,8 @@ def _read_ram_limit() -> dict[str, float | str]:
     # Pokud limit není (běh mimo K8s / unlimited), zachováme klíč se známou hodnotou
     return {"memory_limit_gib": "unlimited"}
 
-def _read_file_int(path: str) -> int | None:
+
+def read_file_int(path: str) -> int | None:
     """Read a single integer from a file. Return None on failure."""
     try:
         with open(path) as f:
@@ -83,14 +102,16 @@ def _read_file_int(path: str) -> int | None:
     except (FileNotFoundError, ValueError, PermissionError):
         return None
 
-def _get_container_image() -> str | None:
+
+def get_container_image() -> str | None:
     container_id = os.environ.get("DOCKER_IMAGE")
     if container_id:
         return container_id
 
     return None
 
-def _detect_hardware() -> dict[str, str | int | float]:
+
+def detect_hardware() -> dict[str, str | int | float]:
     """Detect CPU/GPU/hardware info.
 
     When running in Kubernetes container, also logs resource limits
@@ -120,40 +141,44 @@ def _detect_hardware() -> dict[str, str | int | float]:
     info["python_version"] = platform.python_version()
 
     # ── Container Image (no-op outside container) ───────────────
-    container_image = _get_container_image()
+    container_image = get_container_image()
     if container_image:
         info["container_image"] = container_image
 
     # ── OMP_NUM_THREADS ──────────────────────────────────────
     omp_threads = os.environ.get("OMP_NUM_THREADS")
     if omp_threads is not None:
-        try:
+        with contextlib.suppress(ValueError):
             info["cpu_requested"] = int(omp_threads)
-        except ValueError:
-            pass
 
     # ── CPU/memory limits (K8s) ───────────────────────────────
-    info.update(_read_ram_limit())
+    info.update(read_ram_limit())
 
     return info
 
-def _detect_image_libraries() -> dict[str, str]:
+
+def detect_image_libraries() -> dict[str, str]:
     info = {}
     try:
         import pyvips
-        info["libvips_version"] = f"{pyvips.version(0)}.{pyvips.version(1)}.{pyvips.version(2)}"
+
+        info["libvips_version"] = (
+            f"{pyvips.version(0)}.{pyvips.version(1)}.{pyvips.version(2)}"
+        )
     except ImportError:
         info["libvips_version"] = "not_installed"
 
     try:
         import openslide
+
         info["openslide_version"] = openslide.__version__
     except ImportError:
         info["openslide_version"] = "not_installed"
 
     return info
 
-def _detect_pytorch() -> dict[str, str]:
+
+def detect_pytorch() -> dict[str, str]:
     """Detect PyTorch build details for GPU reproducibility."""
     info: dict[str, str] = {}
     info["torch_version"] = torch.__version__
@@ -172,7 +197,8 @@ def _detect_pytorch() -> dict[str, str]:
 
     return info
 
-def _detect_seeds() -> dict[str, str]:
+
+def detect_seeds() -> dict[str, str]:
     """Read random seed state from environment/config."""
     info: dict[str, str] = {}
     for key in ("SEED", "RANDOM_SEED", "PL_SEED", "TORCH_SEED"):
@@ -191,16 +217,18 @@ def _detect_seeds() -> dict[str, str]:
 
     return info
 
+
 # ──────────────────────────────────────────────
 # Environment snapshot
 # ──────────────────────────────────────────────
 
 
-def _snapshot_environment(artifact_dir: str) -> str:
+def snapshot_environment(artifact_dir: str) -> str:
     """Freeze environment to *artifact_dir* and return the pip-freeze text."""
     req_path = os.path.join(artifact_dir, "requirements_frozen.txt")
     with open(req_path, "w") as f:
         import importlib.metadata
+
         pkgs = []
         for dist in importlib.metadata.distributions():
             name = dist.name or dist.metadata.get("Name")
@@ -214,13 +242,13 @@ def _snapshot_environment(artifact_dir: str) -> str:
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(artifact_dir, src))
 
-    _snapshot_system_packages(artifact_dir)
+    snapshot_system_packages(artifact_dir)
 
     with open(req_path) as f:
         return f.read()
 
 
-def _snapshot_system_packages(artifact_dir: str) -> None:
+def snapshot_system_packages(artifact_dir: str) -> None:
     """Snapshot installed system packages for container reproducibility.
 
     Writes one of:
@@ -248,17 +276,132 @@ def _snapshot_system_packages(artifact_dir: str) -> None:
 # ──────────────────────────────────────────────
 
 
-def _get_git_tags() -> dict[str, str]:
+def get_git_tags() -> dict[str, str]:
     """Read git tags from active MLflow run."""
     import mlflow
 
     git_tags: dict[str, str] = {}
+    from mlflow.tracking import MlflowClient
+
     run = mlflow.active_run()
     if run and run.info and run.info.run_id:
-        client = mlflow.tracking.MlflowClient()
+        client = MlflowClient()
         run_data = client.get_run(run.info.run_id)
         git_tags = dict(run_data.data.tags) if run_data.data.tags else {}
     return git_tags
+
+
+log = logging.getLogger(__name__)
+
+
+def _attempt(
+    section: str,
+    call: Callable[[], Any],
+    default: Any,
+    strict: bool,
+) -> Any:
+    """Run a detection section, swallowing errors unless *strict*."""
+    try:
+        return call()
+    except Exception as e:
+        if strict:
+            raise
+        log.warning("[capture_environment] %s failed: %s", section, e)
+        return default
+
+
+def _detect_all_sections(
+    result: dict[str, Any],
+    skip_hardware: bool,
+    strict: bool,
+) -> None:
+    """Fill *result* with all pure-detection sections (no MLflow side effects)."""
+    import mlflow
+
+    result["pytorch"] = _attempt("PyTorch detection", detect_pytorch, {}, strict)
+
+    try:
+        result["mlflow_version"] = mlflow.__version__
+    except Exception:
+        result["mlflow_version"] = "unknown"
+
+    def _user() -> tuple[str | None, dict[str, str]]:
+        user_run_id, user_tags = lookup_user_run()
+        return user_run_id, (user_tags or {})
+
+    user_run_id, user_tags = _attempt("User lookup", _user, (None, {}), strict)
+    result.update(user_run_id=user_run_id, user_tags=user_tags)
+
+    result["hardware"] = _attempt(
+        "Hardware detection",
+        lambda: {} if skip_hardware else detect_hardware(),
+        {},
+        strict,
+    )
+    result["seeds"] = _attempt("Seed detection", detect_seeds, {}, strict)
+    result["image_libraries"] = _attempt(
+        "Image library detection", detect_image_libraries, {}, strict
+    )
+
+
+def _log_env_tags(result: dict[str, Any]) -> None:
+    """Set user/dataset/start-time tags on the active MLflow run."""
+    import mlflow
+
+    from rationai.mlkit.provenance.dataset import lookup_dataset_run
+
+    env_tags: dict[str, str] = {}
+    if result.get("user_run_id"):
+        env_tags["user_run_id"] = str(result["user_run_id"])
+        utags: dict[str, str] = result.get("user_tags") or {}
+        for key in ("username", "real_name", "organization"):
+            if key in utags:
+                env_tags[key] = utags[key]
+
+    dataset_run_id = lookup_dataset_run()
+    if dataset_run_id:
+        env_tags["dataset_run_id"] = dataset_run_id
+
+    env_tags["prov_start_time"] = datetime.now(UTC).isoformat()
+    mlflow.set_tags(env_tags)
+
+
+def _log_env_params(result: dict[str, Any]) -> None:
+    """Log hardware/pytorch/image-library params and seed tags."""
+    import mlflow
+
+    all_params: dict[str, str | float | int] = {
+        **result.get("hardware", {}),
+        **result.get("pytorch", {}),
+        **result.get("image_libraries", {}),
+    }
+    if all_params:
+        mlflow.log_params(all_params)
+
+    seeds = result.get("seeds") or {}
+    if seeds:
+        mlflow.set_tags({f"seed_{k}": str(v) for k, v in seeds.items()})
+
+
+def _log_env_snapshot(strict: bool) -> str | None:
+    """Freeze the environment and upload it as artifacts."""
+    import uuid
+
+    import mlflow
+
+    artifact_dir = f"_mlflow_env_{uuid.uuid4().hex[:8]}"
+    try:
+        os.makedirs(artifact_dir, exist_ok=True)
+        frozen = snapshot_environment(artifact_dir)
+        mlflow.log_artifacts(artifact_dir, artifact_path="environment")
+        return frozen
+    except Exception as e:
+        if strict:
+            raise
+        log.warning("[capture_environment] Environment snapshot failed: %s", e)
+        return None
+    finally:
+        shutil.rmtree(artifact_dir, ignore_errors=True)
 
 
 def capture_environment(
@@ -275,126 +418,16 @@ def capture_environment(
     """
     import mlflow
 
-    from rationai.mlkit.provenance.dataset import _lookup_dataset_run
-
     if not mlflow.active_run():
         return {}
 
-    result: dict[str, object] = {}
+    result: dict[str, Any] = {}
 
-    # ── PyTorch build info ───────────────────────────────────
-    try:
-        result["pytorch"] = _detect_pytorch()
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] PyTorch detection failed: %s", e)
-        result["pytorch"] = {}
+    _detect_all_sections(result, skip_hardware, strict)
+    _log_env_tags(result)
+    _log_env_params(result)
 
-    # ── MLflow version ───────────────────────────────────────
-    try:
-        result["mlflow_version"] = mlflow.__version__
-    except Exception:
-        result["mlflow_version"] = "unknown"
-
-    # ── User lookup ───────────────────────────────────────────
-    try:
-        user_run_id, user_tags = _lookup_user_run()
-        result["user_run_id"] = user_run_id
-        result["user_tags"] = user_tags or {}
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] User lookup failed: %s", e)
-        result.update(user_run_id=None, user_tags={})
-
-    # ── Hardware ──────────────────────────────────────────────
-    try:
-        if not skip_hardware:
-            result["hardware"] = _detect_hardware()
-        else:
-            result["hardware"] = {}
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] Hardware detection failed: %s", e)
-        result["hardware"] = {}
-
-    # ── Seeds ─────────────────────────────────────────────────
-    try:
-        result["seeds"] = _detect_seeds()
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] Seed detection failed: %s", e)
-        result["seeds"] = {}
-
-    # ── Log tags to MLflow ────────────────────────────────────
-    env_tags: dict[str, str] = {}
-    if result.get("user_run_id"):
-        env_tags["user_run_id"] = str(result["user_run_id"])
-        utags: dict[str, str] = result.get("user_tags") or {}  # type: ignore[assignment]
-        for key in ("username", "real_name", "organization"):
-            if key in utags:
-                env_tags[key] = utags[key]
-
-    dataset_run_id = _lookup_dataset_run()
-    if dataset_run_id:
-        env_tags["dataset_run_id"] = dataset_run_id
-
-    env_tags.update(
-        {
-            "prov_start_time": datetime.now(UTC).isoformat(),
-        }
-    )
-    mlflow.set_tags(env_tags)
-
-    # ── Image libraries ─────────────────────────────────────────
-    try:
-        result["image_libraries"] = _detect_image_libraries()
-    except Exception as e:
-        if strict:
-            raise
-        log = logging.getLogger(__name__)
-        log.warning("[capture_environment] Image library detection failed: %s", e)
-        result["image_libraries"] = {}
-
-    # ── Log params ────────────────────────────────────────────
-    all_params: dict[str, str | float | int] = {
-        **result.get("hardware", {}),  # type: ignore
-        **result.get("pytorch", {}),  # type: ignore
-        **result.get("image_libraries", {}),  # type: ignore
-    }
-    if all_params:
-        mlflow.log_params(all_params)
-
-    # ── Log seeds as tags (strings) ───────────────────────────
-    seeds = result.get("seeds") or {}  # type: ignore
-    if seeds:
-        mlflow.set_tags({f"seed_{k}": str(v) for k, v in seeds.items()})
-
-    # ── Environment snapshot ──────────────────────────────────
-    frozen_requirements = None
-    if snapshot_env:
-        import uuid
-
-        artifact_dir = f"_mlflow_env_{uuid.uuid4().hex[:8]}"
-        os.makedirs(artifact_dir, exist_ok=True)
-        try:
-            frozen_requirements = _snapshot_environment(artifact_dir)
-            mlflow.log_artifacts(artifact_dir, artifact_path="environment")
-        except Exception as e:
-            if strict:
-                raise
-            log = logging.getLogger(__name__)
-            log.warning("[capture_environment] Environment snapshot failed: %s", e)
-        finally:
-            shutil.rmtree(artifact_dir, ignore_errors=True)
-
+    frozen_requirements = _log_env_snapshot(strict) if snapshot_env else None
     result["frozen_requirements"] = frozen_requirements
 
     return result

@@ -83,6 +83,11 @@ class EnvironmentCallback(Callback):
         self._user_tags: dict[str, str] = {}
         self._temp_dirs: list[str] = []
 
+    @property
+    def frozen_requirements(self) -> str | None:
+        """pip-freeze text captured at fit start (None before that)."""
+        return self._frozen_requirements
+
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Capture environment metadata at the start of training."""
         if not mlflow.active_run():

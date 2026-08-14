@@ -55,24 +55,24 @@ def get_prov_prefixes(override: dict[str, str] | None = None) -> dict[str, str]:
 # ──────────────────────────────────────────────
 
 
-def _safe_id(name: str) -> str:
+def safe_id(name: str) -> str:
     """Sanitise a name so it can be used as a PROV identifier fragment."""
     return re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
 
-def _qualified(prefix: str, local: str) -> str:
+def qualified(prefix: str, local: str) -> str:
     return f"{prefix}:{local}"
 
 
-def _typed_value(value: Any) -> list[str]:
+def typed_value(value: Any) -> list[str]:
     return [str(value)]
 
 
-def _qualified_name(type_prefix: str, type_local: str) -> dict[str, str]:
+def qualified_name(type_prefix: str, type_local: str) -> dict[str, str]:
     return {"type": "prov:QUALIFIED_NAME", "$": f"{type_prefix}:{type_local}"}
 
 
-def _iso_timestamp(ts_ms: int | None = None) -> str:
+def iso_timestamp(ts_ms: int | None = None) -> str:
     if ts_ms is not None:
         dt = _dt.datetime.fromtimestamp(ts_ms / 1000, tz=_dt.UTC)
     else:

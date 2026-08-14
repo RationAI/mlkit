@@ -58,7 +58,12 @@ def autolog(
             config.metadata.hyperparams.
     """
     if func is None:
-        return partial(autolog, log_config=log_config, log_stream=log_stream)
+        return partial(
+            autolog,
+            log_config=log_config,
+            log_stream=log_stream,
+            log_hyperparams=log_hyperparams,
+        )
 
     @wraps(func)
     def wrapper(config: DictConfig) -> None:

@@ -16,12 +16,12 @@ import mlflow
 import pandas as pd
 
 from rationai.mlkit.provenance.common import (
-    _iso_timestamp,
-    _qualified,
-    _qualified_name,
-    _safe_id,
-    _typed_value,
     get_prov_prefixes,
+    iso_timestamp,
+    qualified,
+    qualified_name,
+    safe_id,
+    typed_value,
 )
 
 
@@ -73,26 +73,26 @@ def build_dataset_prov(
     username, real_name, organization = _get_user_tags()
 
     # ── AGENT (from MLflow tags) ─────────────────────
-    agent_local = _safe_id(f"user_{username}")
-    agent_id = _qualified("gen", agent_local)
+    agent_local = safe_id(f"user_{username}")
+    agent_id = qualified("gen", agent_local)
 
     agent_props: dict[str, list[Any]] = {}
-    agent_props["schema:name"] = _typed_value(real_name)
+    agent_props["schema:name"] = typed_value(real_name)
     if organization:
-        agent_props["schema:affiliation"] = _typed_value(organization)
-    agent_props["prov:type"] = [_qualified_name("schema", "Person")]
+        agent_props["schema:affiliation"] = typed_value(organization)
+    agent_props["prov:type"] = [qualified_name("schema", "Person")]
 
-    run_act_local = _safe_id(f"run_{run_id}")
-    run_act_id = _qualified("gen", run_act_local)
+    run_act_local = safe_id(f"run_{run_id}")
+    run_act_id = qualified("gen", run_act_local)
 
-    ds_local = _safe_id(f"dataset_{dataset_name}_{version.replace('.', '_')}")
-    ds_id = _qualified("gen", ds_local)
+    ds_local = safe_id(f"dataset_{dataset_name}_{version.replace('.', '_')}")
+    ds_id = qualified("gen", ds_local)
 
     meta_local = run_id
-    meta_id = _qualified("meta", meta_local)
+    meta_id = qualified("meta", meta_local)
 
     main_act_local = f"DatasetReg_{run_id[:8]}"
-    main_act_id = _qualified("blank", main_act_local)
+    main_act_id = qualified("blank", main_act_local)
 
     entities: dict[str, dict[str, Any]] = {}
     activities: dict[str, dict[str, Any]] = {}
@@ -108,28 +108,28 @@ def build_dataset_prov(
         rel_counter[0] += 1
         return rid
 
-    now = _iso_timestamp()
+    now = iso_timestamp()
 
     # ── DATASET ENTITY ───────────────────────────────────
     ds_props: dict[str, list[Any]] = {
-        "schema:name": _typed_value(dataset_name),
-        "prov:type": [_qualified_name("sosa", "Sample")],
-        "dct:description": _typed_value(
+        "schema:name": typed_value(dataset_name),
+        "prov:type": [qualified_name("sosa", "Sample")],
+        "dct:description": typed_value(
             f"Dataset {dataset_name} v{version} ({num_samples} samples)",
         ),
     }
     if manifest_path:
-        ds_props["schema:url"] = _typed_value(manifest_path)
+        ds_props["schema:url"] = typed_value(manifest_path)
     entities[ds_id] = ds_props
 
     # ── ACTIVITY (the registration action) ────────────────
     run_activity: dict[str, Any] = {}
-    run_activity["prov:type"] = [_qualified_name("schema", "Action")]
+    run_activity["prov:type"] = [qualified_name("schema", "Action")]
     run_activity["prov:startTime"] = [now]
     run_activity["prov:endTime"] = [now]
-    run_activity["schema:name"] = _typed_value(f"Register dataset {dataset_name}")
-    run_activity["gen:dataset_name"] = _typed_value(dataset_name)
-    run_activity["gen:dataset_version"] = _typed_value(version)
+    run_activity["schema:name"] = typed_value(f"Register dataset {dataset_name}")
+    run_activity["gen:dataset_name"] = typed_value(dataset_name)
+    run_activity["gen:dataset_version"] = typed_value(version)
     activities[run_act_id] = run_activity
 
     # ── USED (activity consumed the dataset entity) ──────
@@ -140,15 +140,15 @@ def build_dataset_prov(
 
     # ── CPM METADATA ENTITY ───────────────────────────────
     meta_entity: dict[str, list[Any]] = {}
-    meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
-    meta_entity["gen:dataset_name"] = _typed_value(dataset_name)
-    meta_entity["gen:dataset_version"] = _typed_value(version)
-    meta_entity["gen:dataset_root"] = _typed_value(dataset_root)
-    meta_entity["gen:num_samples"] = _typed_value(str(num_samples))
-    meta_entity["gen:num_positive"] = _typed_value(str(num_positive))
-    meta_entity["gen:num_negative"] = _typed_value(str(num_negative))
+    meta_entity["prov:type"] = [qualified_name("cpm", "BundleMetadata")]
+    meta_entity["gen:dataset_name"] = typed_value(dataset_name)
+    meta_entity["gen:dataset_version"] = typed_value(version)
+    meta_entity["gen:dataset_root"] = typed_value(dataset_root)
+    meta_entity["gen:num_samples"] = typed_value(str(num_samples))
+    meta_entity["gen:num_positive"] = typed_value(str(num_positive))
+    meta_entity["gen:num_negative"] = typed_value(str(num_negative))
     if manifest_path:
-        meta_entity["gen:manifest_path"] = _typed_value(manifest_path)
+        meta_entity["gen:manifest_path"] = typed_value(manifest_path)
 
     file_sizes_str = json.dumps(file_sizes)
     meta_entity["gen:file_sizes"] = [file_sizes_str]
@@ -156,7 +156,7 @@ def build_dataset_prov(
 
     # ── CPM MAIN ACTIVITY ────────────────────────────────
     main_activity: dict[str, Any] = {}
-    main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
+    main_activity["prov:type"] = [qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
         {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]
@@ -199,19 +199,19 @@ def build_dataset_prov(
 # ──────────────────────────────────────────────
 
 
-def _lookup_experiment(name: str) -> str | None:
+def lookup_experiment(name: str) -> str | None:
     """Return the MLflow experiment ID for *name*, or None."""
     exp = mlflow.get_experiment_by_name(name)
     return exp.experiment_id if exp else None
 
 
-def _lookup_dataset_run() -> str | None:
+def lookup_dataset_run() -> str | None:
     """Return the latest Dataset_Registry run ID.
 
     Falls back to the most recent run so that workflows with only one
     registered dataset still work.
     """
-    exp_id = _lookup_experiment("Dataset_Registry")
+    exp_id = lookup_experiment("Dataset_Registry")
     if exp_id is None:
         return None
 
@@ -225,7 +225,7 @@ def _lookup_dataset_run() -> str | None:
     return pd.DataFrame(runs_df).iloc[0]["run_id"]
 
 
-def _detect_manifest() -> tuple[str | None, str | None]:
+def detect_manifest() -> tuple[str | None, str | None]:
     """Walk data/ looking for manifest.csv.
 
     Returns (manifest_path, data_root) or (None, None).
@@ -290,7 +290,7 @@ def verify_dataset(
         }
     """
     if manifest_path is None:
-        manifest_path, data_root = _detect_manifest()
+        manifest_path, data_root = detect_manifest()
 
     if manifest_path is None:
         return {
@@ -305,11 +305,11 @@ def verify_dataset(
     if data_root is None:
         data_root = os.path.dirname(os.path.abspath(manifest_path))
 
-    dataset_run_id = _lookup_dataset_run()
-    return _verify_dataset(manifest_path, data_root, dataset_run_id)
+    dataset_run_id = lookup_dataset_run()
+    return verify_manifest(manifest_path, data_root, dataset_run_id)
 
 
-def _verify_dataset(
+def verify_manifest(
     manifest_path: str,
     data_root: str,
     dataset_run_id: str | None,
@@ -531,3 +531,13 @@ def register_dataset(
 
     print(f"  [register_dataset] {dataset_name} v{version} → run_id={run_id}")
     return run_id
+
+
+# ──────────────────────────────────────────────
+# Backward-compatible private aliases (pre-0.5 names)
+# ──────────────────────────────────────────────
+
+_detect_manifest = detect_manifest
+_lookup_experiment = lookup_experiment
+_lookup_dataset_run = lookup_dataset_run
+_verify_dataset = verify_manifest

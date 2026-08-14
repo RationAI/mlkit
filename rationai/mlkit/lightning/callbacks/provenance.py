@@ -23,13 +23,14 @@ Example::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import shutil
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import mlflow
 import pandas as pd
@@ -144,6 +145,11 @@ class ProvenanceCallback(Callback):
         register_model: If True, auto-log model summary from pl_module.
         register_optimizer: Log optimizer config (or True to auto-detect).
         register_scheduler: Log scheduler config (or True to auto-detect).
+        split_uris: Optional mapping of split name → CSV URI
+            (``mlflow-artifacts:/...`` or local path) produced by an upstream
+            preprocessing pipeline.  When given, these are the authoritative
+            splits: they are referenced (not copied) in provenance and no
+            train/test split is recomputed.
         prov_prefixes: Optional override for PROV namespace prefixes.
     """
 
@@ -160,6 +166,7 @@ class ProvenanceCallback(Callback):
         register_model: bool = True,
         register_optimizer: bool = True,
         register_scheduler: bool = True,
+        split_uris: dict[str, str] | None = None,
         prov_prefixes: dict[str, str] | None = None,
     ) -> None:
         """Initialise the provenance callback.
@@ -176,6 +183,8 @@ class ProvenanceCallback(Callback):
             register_model: If True, auto-log model summary from pl_module.
             register_optimizer: Log optimizer config (or True to auto-detect).
             register_scheduler: Log scheduler config (or True to auto-detect).
+            split_uris: Optional mapping of split name to dataset URI, used to
+                reference pre-existing splits instead of recomputing train/test.
             prov_prefixes: Optional override for PROV namespace prefixes.
         """
         self.model_name = model_name or os.environ.get("MODEL_NAME", "model")
@@ -189,6 +198,7 @@ class ProvenanceCallback(Callback):
         self.register_model = register_model
         self.register_optimizer = register_optimizer
         self.register_scheduler = register_scheduler
+        self.split_uris = split_uris
         self._prov_prefixes = prov_prefixes
 
         # Internal state (populated by on_fit_start or sibling callbacks)
@@ -209,146 +219,258 @@ class ProvenanceCallback(Callback):
 
         for cb in trainer.callbacks:
             if isinstance(cb, EnvironmentCallback):
-                self._frozen_requirements = getattr(cb, "_frozen_requirements", None)
+                self._frozen_requirements = cb.frozen_requirements
             elif isinstance(cb, DatasetVerificationCallback):
-                self._verification = getattr(cb, "_verification", None)
-                self._split_data = getattr(cb, "_split_data", None)
+                self._verification = cb.verification
+                self._split_data = cb.split_data
 
-    def _fallback_on_fit_start(self, trainer: Any, pl_module: Any) -> None:
-        """Do environment + verification work when no sibling callbacks exist."""
-        from rationai.mlkit.provenance.dataset import (
-            _detect_manifest,
-            _lookup_dataset_run,
-            _verify_dataset,
-        )
-        from rationai.mlkit.provenance.environment import (
-            _detect_docker,
-            _detect_pytorch,
-            _detect_seeds,
-            _detect_hardware,
-            _lookup_user_run,
-            _snapshot_environment,
+    def _load_provided_splits(self) -> None:
+        """Load precomputed split CSVs declared via ``split_uris``.
+
+        The URIs point at artifacts of an upstream preprocessing run
+        (``mlflow-artifacts:/...``) or local CSV files.  They are referenced
+        from provenance, never copied into this run, and no new split is
+        computed.
+        """
+        from mlflow.artifacts import download_artifacts
+        from omegaconf import DictConfig, OmegaConf
+
+        splits_node: Any = self.split_uris
+        if isinstance(splits_node, DictConfig):
+            splits_node = OmegaConf.to_container(splits_node, resolve=True)
+
+        uris = {str(k): str(v) for k, v in dict(splits_node).items()}
+        stats: dict[str, dict[str, Any]] = {}
+        for name, uri in uris.items():
+            local = (
+                download_artifacts(uri) if uri.startswith("mlflow-artifacts:") else uri
+            )
+            df = pd.read_csv(local)
+            entry: dict[str, Any] = {"rows": len(df), "uri": uri}
+            if "case_id" in df.columns:
+                entry["cases"] = int(df["case_id"].nunique())
+            if "fold" in df.columns:
+                try:
+                    entry["folds"] = sorted(int(f) for f in df["fold"].unique())
+                except (TypeError, ValueError):
+                    log.warning(
+                        "[ProvenanceCallback] split %r: non-integer fold values "
+                        "ignored",
+                        name,
+                    )
+            stats[name] = entry
+            log.info(
+                "[ProvenanceCallback] split %r: %s rows (%s)",
+                name,
+                entry["rows"],
+                uri,
+            )
+
+        self._split_data = {
+            "source": "artifacts",
+            "splits": stats,
+        }
+
+        params: dict[str, str | int] = {}
+        for name, entry in stats.items():
+            params[f"split_{name}_rows"] = entry["rows"]
+            if "cases" in entry:
+                params[f"split_{name}_cases"] = entry["cases"]
+        mlflow.log_params(params)
+        mlflow.set_tags(
+            {
+                "split_source": "preprocessing_artifacts",
+                "split_uris": json.dumps(uris),
+            }
         )
 
-        # ── User lookup ─────────────────────────────────────────
+    def _split_summary(self) -> dict[str, Any] | None:
+        """Serializable summary of the split used, for prov + run summary."""
+        if not self._split_data:
+            return None
+        if "splits" in self._split_data:
+            return {
+                "source": "artifacts",
+                "splits": self._split_data["splits"],
+            }
+        train = cast("list[Any]", self._split_data.get("train") or [])
+        test = cast("list[Any]", self._split_data.get("test") or [])
+        return {
+            "source": "manifest_split",
+            "test_size": self.test_size,
+            "random_state": self.random_state,
+            "stratified": True,
+            "train_count": len(train),
+            "test_count": len(test),
+            "train": self._split_data.get("train"),
+            "test": self._split_data.get("test"),
+        }
+
+    def _lookup_user_safe(self) -> tuple[str | None, dict[str, str]]:
+        """Best-effort user lookup; returns ``(run_id, tags)`` or ``(None, {})``."""
+        from rationai.mlkit.provenance.environment import lookup_user_run
+
         try:
-            user_run_id, user_tags = _lookup_user_run()
+            return lookup_user_run()
         except Exception as e:
             if self.strict:
                 raise
             log.warning("[ProvenanceCallback] User lookup failed: %s", e)
-            user_run_id, user_tags = None, {}
+            return None, {}
 
-        # ── Hardware (skip if MLflow system metrics are on) ─────
+    def _detect_environment_params(
+        self, trainer: Any
+    ) -> tuple[dict[str, Any], dict[str, str], dict[str, Any], dict[str, Any]]:
+        """Detect hardware / docker / pytorch / seed settings for the run."""
+        from rationai.mlkit.provenance.environment import (
+            detect_hardware,
+            detect_pytorch,
+            detect_seeds,
+            get_container_image,
+        )
+
+        # Hardware is skipped when MLflow system metrics are enabled
         sys_metrics_on = any(
             getattr(logger, "log_system_metrics", False) for logger in trainer.loggers
         )
-        hardware = {} if sys_metrics_on else _detect_hardware()
-        docker = _detect_docker()
-        pytorch = _detect_pytorch()
-        seeds = _detect_seeds()
+        hardware = {} if sys_metrics_on else detect_hardware()
+        docker: dict[str, str] = {}
+        container_image = get_container_image()
+        if container_image:
+            docker["container_image"] = container_image
+        pytorch = detect_pytorch()
+        seeds = detect_seeds()
+        return hardware, docker, pytorch, seeds
 
-        # ── Dataset verification & split ────────────────────────
+    def _load_provided_splits_safe(self) -> None:
+        """Load ``split_uris`` (authoritative splits), respecting ``strict``."""
+        if not self.split_uris:
+            return
+        try:
+            self._load_provided_splits()
+        except Exception as e:
+            if self.strict:
+                raise
+            log.warning("[ProvenanceCallback] Loading provided splits failed: %s", e)
+
+    def _resolve_manifest(self) -> tuple[str | None, str | None]:
+        """Resolve ``(manifest_path, data_root)``, auto-detecting when unset."""
+        from rationai.mlkit.provenance.dataset import detect_manifest
+
         manifest_path = self.manifest_path
         data_root = self.data_root
 
-        if manifest_path is None:
-            manifest_path, data_root = _detect_manifest()
-        elif data_root is None:
+        if manifest_path is None and not self.split_uris:
+            manifest_path, data_root = detect_manifest()
+        elif data_root is None and manifest_path is not None:
             data_root = os.path.dirname(os.path.abspath(manifest_path))
+        return manifest_path, data_root
 
-        if manifest_path and data_root:
-            from rationai.mlkit.provenance.dataset import (
-                load_manifest,
-            )
+    def _verify_and_split(self, manifest_path: str, data_root: str) -> None:
+        """Verify the dataset manifest and (legacy) compute a train/test split."""
+        from rationai.mlkit.provenance.dataset import (
+            lookup_dataset_run,
+            verify_manifest,
+        )
 
-            # ── Verification (always) ────────────────────────────
-            dataset_run_id = _lookup_dataset_run()
-            verification = _verify_dataset(manifest_path, data_root, dataset_run_id)
-            self._verification = verification or {}
-            verification_details: list[str] = verification.get("details", [])
+        # ── Verification (always) ────────────────────────────
+        dataset_run_id = lookup_dataset_run()
+        verification = verify_manifest(manifest_path, data_root, dataset_run_id)
+        self._verification = verification or {}
+        for detail in verification.get("details", []):
+            log.info(f"  [ProvenanceCallback] {detail}")
 
-            for detail in verification_details:
-                log.info(f"  [ProvenanceCallback] {detail}")
-
-            # Log verification results
-            if verification:
-                mlflow.log_params(
-                    {
-                        "dataset_verified": verification["verified"],
-                        "dataset_file_sizes_match": verification["file_sizes_match"]
-                        is True,
-                        "dataset_files_missing": verification["files_missing"],
-                        "dataset_files_total": verification["files_total"],
-                    }
-                )
-                if verification["verified"]:
-                    mlflow.set_tag("dataset_verification", "VERIFIED")
-                else:
-                    mlflow.set_tag("dataset_verification", "MISMATCH")
-                    mlflow.set_tag(
-                        "dataset_verification_details",
-                        "; ".join(verification["details"]),
-                    )
-
-                if self.fail_fast and not verification["verified"]:
-                    raise RuntimeError(
-                        "Dataset verification failed — aborting training.\n"
-                        + "\n".join(f"  {d}" for d in verification["details"]),
-                    )
-
-            # ── Train/test split (only if test_size > 0) ─────────
-            if self.test_size > 0:
-                from sklearn.model_selection import train_test_split
-
-                samples = load_manifest(manifest_path, data_root)
-                train_samples, test_samples = train_test_split(
-                    samples,
-                    test_size=self.test_size,
-                    random_state=self.random_state,
-                    stratify=[s["label"] for s in samples],
-                )
-
-                self._split_data = {
-                    "train": train_samples,
-                    "test": test_samples,
-                    "test_size": self.test_size,
-                    "random_state": self.random_state,
+        if verification:
+            mlflow.log_params(
+                {
+                    "dataset_verified": verification["verified"],
+                    "dataset_file_sizes_match": bool(verification["file_sizes_match"]),
+                    "dataset_files_missing": verification["files_missing"],
+                    "dataset_files_total": verification["files_total"],
                 }
-
-                # Log split as artifact
-                split_dir = f"_mlflow_split_{uuid.uuid4().hex[:8]}"
-                os.makedirs(split_dir, exist_ok=True)
-                self._temp_dirs.append(split_dir)
-                for subset_name, subset_samples in [
-                    ("train", train_samples),
-                    ("test", test_samples),
-                ]:
-                    split_file = os.path.join(split_dir, f"{subset_name}_split.csv")
-                    pd.DataFrame(subset_samples).to_csv(split_file, index=False)
-
-                mlflow.log_artifacts(split_dir, artifact_path="split")
-
-                # Log split counts
-                train_labels = [s["label"] for s in train_samples]
-                test_labels = [s["label"] for s in test_samples]
-                mlflow.log_params(
-                    {
-                        "train_samples": len(train_samples),
-                        "test_samples": len(test_samples),
-                        "train_positive": sum(train_labels),
-                        "train_negative": len(train_labels) - sum(train_labels),
-                        "test_positive": sum(test_labels),
-                        "test_negative": len(test_labels) - sum(test_labels),
-                    }
-                )
-        else:
-            log.warning(
-                "[ProvenanceCallback] No manifest.csv found — "
-                "train/test split not logged."
             )
+            if verification["verified"]:
+                mlflow.set_tag("dataset_verification", "VERIFIED")
+            else:
+                mlflow.set_tag("dataset_verification", "MISMATCH")
+                mlflow.set_tag(
+                    "dataset_verification_details",
+                    "; ".join(verification["details"]),
+                )
 
-        # ── Tags ────────────────────────────────────────────────
+            if self.fail_fast and not verification["verified"]:
+                raise RuntimeError(
+                    "Dataset verification failed — aborting training.\n"
+                    + "\n".join(f"  {d}" for d in verification["details"]),
+                )
+
+        # ── Train/test split (only if test_size > 0 and no provided splits) ─
+        if self.test_size > 0 and self._split_data is None:
+            self._legacy_train_test_split(manifest_path, data_root)
+
+    def _legacy_train_test_split(self, manifest_path: str, data_root: str) -> None:
+        """Recompute a stratified train/test split from the manifest."""
+        from sklearn.model_selection import train_test_split
+
+        from rationai.mlkit.provenance.dataset import load_manifest
+
+        samples = load_manifest(manifest_path, data_root)
+        train_samples, test_samples = train_test_split(
+            samples,
+            test_size=self.test_size,
+            random_state=self.random_state,
+            stratify=[s["label"] for s in samples],
+        )
+
+        self._split_data = {
+            "train": train_samples,
+            "test": test_samples,
+            "test_size": self.test_size,
+            "random_state": self.random_state,
+        }
+        self._log_split_artifacts(train_samples, test_samples)
+
+        # Log split counts
+        train_labels = [s["label"] for s in train_samples]
+        test_labels = [s["label"] for s in test_samples]
+        mlflow.log_params(
+            {
+                "train_samples": len(train_samples),
+                "test_samples": len(test_samples),
+                "train_positive": sum(train_labels),
+                "train_negative": len(train_labels) - sum(train_labels),
+                "test_positive": sum(test_labels),
+                "test_negative": len(test_labels) - sum(test_labels),
+            }
+        )
+
+    def _log_split_artifacts(
+        self,
+        train_samples: list[dict[str, Any]],
+        test_samples: list[dict[str, Any]],
+    ) -> None:
+        """Write train/test split CSVs and log them as MLflow artifacts."""
+        split_dir = f"_mlflow_split_{uuid.uuid4().hex[:8]}"
+        self._temp_dirs.append(split_dir)
+        try:
+            os.makedirs(split_dir, exist_ok=True)
+            for subset_name, subset_samples in [
+                ("train", train_samples),
+                ("test", test_samples),
+            ]:
+                split_file = os.path.join(split_dir, f"{subset_name}_split.csv")
+                pd.DataFrame(subset_samples).to_csv(split_file, index=False)
+
+            mlflow.log_artifacts(split_dir, artifact_path="split")
+        except Exception as e:
+            if self.strict:
+                raise
+            log.warning("[ProvenanceCallback] Split artifact logging failed: %s", e)
+
+    def _log_run_tags(self, user_run_id: str | None, user_tags: dict[str, str]) -> None:
+        """Set provenance tags (user / dataset run links, start time)."""
+        from rationai.mlkit.provenance.dataset import lookup_dataset_run
+
         tags: dict[str, str] = {}
         if user_run_id:
             tags["user_run_id"] = user_run_id
@@ -356,16 +478,44 @@ class ProvenanceCallback(Callback):
                 if key in user_tags:
                     tags[key] = user_tags[key]
 
-        dataset_run_id = _lookup_dataset_run()
+        dataset_run_id = lookup_dataset_run()
         if dataset_run_id:
             tags["dataset_run_id"] = dataset_run_id
 
-        tags.update(
-            {
-                "prov_start_time": datetime.now(UTC).isoformat(),
-            }
-        )
+        tags["prov_start_time"] = datetime.now(UTC).isoformat()
         mlflow.set_tags(tags)
+
+    def _log_env_snapshot(self) -> None:
+        """Snapshot the python environment and log it as artifacts."""
+        from rationai.mlkit.provenance.environment import snapshot_environment
+
+        artifact_dir = f"_mlflow_env_{uuid.uuid4().hex[:8]}"
+        self._temp_dirs.append(artifact_dir)
+        try:
+            os.makedirs(artifact_dir, exist_ok=True)
+            self._frozen_requirements = snapshot_environment(artifact_dir)
+            mlflow.log_artifacts(artifact_dir, artifact_path="environment")
+        except Exception as e:
+            if self.strict:
+                raise
+            log.warning("[ProvenanceCallback] Environment snapshot failed: %s", e)
+
+    def _fallback_on_fit_start(self, trainer: Any, pl_module: Any) -> None:
+        """Do environment + verification work when no sibling callbacks exist."""
+        user_run_id, user_tags = self._lookup_user_safe()
+        hardware, docker, pytorch, seeds = self._detect_environment_params(trainer)
+        self._load_provided_splits_safe()
+
+        manifest_path, data_root = self._resolve_manifest()
+        if manifest_path and data_root:
+            self._verify_and_split(manifest_path, data_root)
+        else:
+            log.warning(
+                "[ProvenanceCallback] No manifest.csv found — "
+                "train/test split not logged."
+            )
+
+        self._log_run_tags(user_run_id, user_tags)
 
         # ── Params: hardware + docker + pytorch + split config ──
         all_params: dict[str, str | float | int] = {
@@ -383,17 +533,7 @@ class ProvenanceCallback(Callback):
         if seeds:
             mlflow.set_tags({f"seed_{k}": str(v) for k, v in seeds.items()})
 
-        # ── Environment snapshot ────────────────────────────────
-        artifact_dir = f"_mlflow_env_{uuid.uuid4().hex[:8]}"
-        os.makedirs(artifact_dir, exist_ok=True)
-        self._temp_dirs.append(artifact_dir)
-        try:
-            self._frozen_requirements = _snapshot_environment(artifact_dir)
-            mlflow.log_artifacts(artifact_dir, artifact_path="environment")
-        except Exception as e:
-            if self.strict:
-                raise
-            log.warning("[ProvenanceCallback] Environment snapshot failed: %s", e)
+        self._log_env_snapshot()
 
     # ── lightning hooks ───────────────────────────────────────
 
@@ -516,21 +656,7 @@ class ProvenanceCallback(Callback):
                 "tags": tags,
                 "run_id": run_id,
                 "experiment_name": self.experiment_name,
-                "split": {
-                    "test_size": self.test_size,
-                    "random_state": self.random_state,
-                    "stratified": True,
-                    "train_count": len(self._split_data["train"])
-                    if isinstance(self._split_data, dict)
-                    else 0,  # type: ignore[arg-type]
-                    "test_count": len(self._split_data["test"])
-                    if isinstance(self._split_data, dict)
-                    else 0,  # type: ignore[arg-type]
-                    "train": self._split_data["train"] if self._split_data else None,
-                    "test": self._split_data["test"] if self._split_data else None,
-                }
-                if self._split_data
-                else None,
+                "split": self._split_summary(),
                 "dataset_verification": self._verification,
                 "requirements": self._frozen_requirements,
             }
@@ -550,14 +676,7 @@ class ProvenanceCallback(Callback):
                 tags=tags,
                 start_time_ms=active_run.info.start_time,
                 end_time_ms=active_run.info.end_time,
-                split_data={
-                    "test_size": self.test_size,
-                    "random_state": self.random_state,
-                    "train": self._split_data["train"] if self._split_data else None,
-                    "test": self._split_data["test"] if self._split_data else None,
-                }
-                if self._split_data
-                else None,
+                split_data=self._split_summary(),
                 requirements=self._frozen_requirements,
                 verification=self._verification,
                 prov_prefixes=_get_prov_prefixes(self._prov_prefixes),
@@ -583,4 +702,6 @@ class ProvenanceCallback(Callback):
 
         # ── Clean up temp dirs ──────────────────────────────────
         for d in self._temp_dirs:
-            shutil.rmtree(d, ignore_errors=True)
+            # best-effort cleanup of temporary artifact dirs
+            with contextlib.suppress(OSError):
+                shutil.rmtree(d)

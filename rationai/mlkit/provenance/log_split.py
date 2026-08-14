@@ -9,21 +9,24 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import mlflow
 import pandas as pd
 from omegaconf import DictConfig
 
-from rationai.mlkit.lightning.loggers import MLFlowLogger
 from rationai.mlkit.provenance.common import (
-    _iso_timestamp,
-    _qualified,
-    _qualified_name,
-    _safe_id,
     get_prov_prefixes,
+    iso_timestamp,
+    qualified,
+    qualified_name,
+    safe_id,
 )
 from rationai.mlkit.provenance.environment import capture_environment
+
+
+if TYPE_CHECKING:
+    from rationai.mlkit.lightning.loggers import MLFlowLogger
 
 
 def _to_native(obj: Any) -> Any:
@@ -42,14 +45,14 @@ def log_split_provenance(
     logger: MLFlowLogger,
     config: DictConfig,
     *,
-    dataset_name: str = "ulcerative-colitis-dysplasia",
+    dataset_name: str,
     version: str = "1.0.0",
     snapshot_env: bool = True,
 ) -> dict[str, Any]:
     """Log split metadata + PROV document to active MLflow run.
 
     Args:
-        splits: Dict mapping split name → DataFrame (e.g. {"train": ..., "test_preliminary": ..., "test_final": ...}).
+        splits: Dict mapping split name → DataFrame (e.g. {"train": ..., "test": ...}).
         logger: MLFlowLogger instance for the current run.
         config: Hydra config (must have ``splits`` and optionally ``n_folds``, ``random_state``).
         dataset_name: Human-readable dataset name.
@@ -84,13 +87,15 @@ def log_split_provenance(
     _n_folds = getattr(config, "n_folds", 0)
     _random_state = getattr(config, "random_state", 42)
 
+    split_sizes = {
+        f"split_size_{name}": size
+        for name, size in dict(getattr(config, "splits", {}) or {}).items()
+    }
     mlflow.log_params(
         {
             "total_samples": total_samples,
             "total_cases": total_cases,
-            "split_train_size": config.splits.get("train", 0),
-            "split_test_preliminary_size": config.splits.get("test_preliminary", 0),
-            "split_test_final_size": config.splits.get("test_final", 0),
+            **split_sizes,
             "n_folds": _n_folds,
             "random_state": _random_state,
         }
@@ -119,7 +124,7 @@ def log_split_provenance(
         raise RuntimeError("No active MLflow run — call inside @autolog")
     run_id = active_run.info.run_id
 
-    prov_doc = _build_split_prov(
+    prov_doc = build_split_prov(
         run_id=run_id,
         dataset_name=dataset_name,
         version=version,
@@ -148,7 +153,7 @@ def log_split_provenance(
     }
 
 
-def _build_split_prov(
+def build_split_prov(
     run_id: str,
     dataset_name: str,
     version: str,
@@ -163,24 +168,24 @@ def _build_split_prov(
     username = _get_username()
 
     # ── AGENT ──────────────────────────────────────────────
-    agent_local = _safe_id(f"user_{username}")
-    agent_id = _qualified("gen", agent_local)
+    agent_local = safe_id(f"user_{username}")
+    agent_id = qualified("gen", agent_local)
     agent_props: dict[str, list[Any]] = {}
     agent_props["schema:name"] = [_typed_value_str(username)]
-    agent_props["prov:type"] = [_qualified_name("schema", "Person")]
+    agent_props["prov:type"] = [qualified_name("schema", "Person")]
 
     # ── IDs ────────────────────────────────────────────────
-    run_act_local = _safe_id(f"run_{run_id}")
-    run_act_id = _qualified("gen", run_act_local)
+    run_act_local = safe_id(f"run_{run_id}")
+    run_act_id = qualified("gen", run_act_local)
 
-    ds_local = _safe_id(f"dataset_{dataset_name}_{version.replace('.', '_')}")
-    ds_id = _qualified("gen", ds_local)
+    ds_local = safe_id(f"dataset_{dataset_name}_{version.replace('.', '_')}")
+    ds_id = qualified("gen", ds_local)
 
     meta_local = run_id
-    meta_id = _qualified("meta", meta_local)
+    meta_id = qualified("meta", meta_local)
 
     main_act_local = f"DatasetSplit_{run_id[:8]}"
-    main_act_id = _qualified("blank", main_act_local)
+    main_act_id = qualified("blank", main_act_local)
 
     entities: dict[str, dict[str, Any]] = {}
     activities: dict[str, dict[str, Any]] = {}
@@ -196,12 +201,12 @@ def _build_split_prov(
         rel_counter[0] += 1
         return rid
 
-    now = _iso_timestamp()
+    now = iso_timestamp()
 
     # ── SOURCE DATASET ENTITY ──────────────────────────────
     entities[ds_id] = {
         "schema:name": [_typed_value_str(dataset_name)],
-        "prov:type": [_qualified_name("sosa", "Sample")],
+        "prov:type": [qualified_name("sosa", "Sample")],
         "dct:description": [
             _typed_value_str(f"Source dataset {dataset_name} v{version}")
         ],
@@ -214,14 +219,14 @@ def _build_split_prov(
     # ── SPLIT ENTITIES (output) ────────────────────────────
     split_entities: dict[str, str] = {}
     for split_name in split_stats:
-        split_local = _safe_id(f"split_{split_name}_{run_id[:8]}")
-        split_id = _qualified("gen", split_local)
+        split_local = safe_id(f"split_{split_name}_{run_id[:8]}")
+        split_id = qualified("gen", split_local)
         split_entities[split_name] = split_id
 
         stats = split_stats[split_name]
         entities[split_id] = {
             "schema:name": [_typed_value_str(f"{dataset_name} - {split_name}")],
-            "prov:type": [_qualified_name("sosa", "Sample")],
+            "prov:type": [qualified_name("sosa", "Sample")],
             "dct:description": [
                 _typed_value_str(
                     f"{split_name} split: {stats['num_samples']} samples, {stats['num_cases']} cases"
@@ -231,7 +236,7 @@ def _build_split_prov(
 
     # ── ACTIVITY ───────────────────────────────────────────
     run_activity: dict[str, Any] = {}
-    run_activity["prov:type"] = [_qualified_name("schema", "Action")]
+    run_activity["prov:type"] = [qualified_name("schema", "Action")]
     run_activity["prov:startTime"] = [now]
     run_activity["prov:endTime"] = [now]
     run_activity["schema:name"] = [_typed_value_str(f"Split dataset {dataset_name}")]
@@ -243,7 +248,7 @@ def _build_split_prov(
 
     # ── CPM METADATA ENTITY ────────────────────────────────
     meta_entity: dict[str, list[Any]] = {}
-    meta_entity["prov:type"] = [_qualified_name("cpm", "BundleMetadata")]
+    meta_entity["prov:type"] = [qualified_name("cpm", "BundleMetadata")]
     meta_entity["gen:dataset_name"] = [_typed_value_str(dataset_name)]
     meta_entity["gen:dataset_version"] = [_typed_value_str(version)]
     meta_entity["gen:n_folds"] = [_typed_value_str(str(n_folds))]
@@ -253,7 +258,7 @@ def _build_split_prov(
 
     # ── CPM MAIN ACTIVITY ──────────────────────────────────
     main_activity: dict[str, Any] = {}
-    main_activity["prov:type"] = [_qualified_name("cpm", "mainActivity")]
+    main_activity["prov:type"] = [qualified_name("cpm", "mainActivity")]
     main_activity["cpm:referencedMetaBundleId"] = [
         {"type": "prov:QUALIFIED_NAME", "$": meta_id},
     ]

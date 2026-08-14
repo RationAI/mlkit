@@ -32,8 +32,8 @@ mlflow ui --host 127.0.0.1 --port 5000    # → http://localhost:5000
 Before training, register researchers and datasets so provenance can reference them:
 
 ```bash
-# Edit example_provenance_setup.py with your own data, then run:
-python example_provenance_setup.py
+# Edit examples/example_provenance_setup.py with your own data, then run:
+python examples/example_provenance_setup.py
 ```
 
 This creates runs in the `User_Registry` and `Dataset_Registry` MLflow experiments.
@@ -43,13 +43,13 @@ This creates runs in the `User_Registry` and `Dataset_Registry` MLflow experimen
 Use `@autolog` + `ProvenanceCallback` in a Hydra-based training script:
 
 ```bash
-python example_provenance_train.py
+python examples/example_provenance_train.py
 ```
 
-Check the MLflow UI at http://localhost:5000 to see the full provenance graph.
+Check the MLflow UI at <http://localhost:5000> to see the full provenance graph.
 
-See [example_provenance_setup.py](example_provenance_setup.py) and
-[example_provenance_train.py](example_provenance_train.py) for complete working examples.
+See [examples/example_provenance_setup.py](examples/example_provenance_setup.py) and
+[examples/example_provenance_train.py](examples/example_provenance_train.py) for complete working examples.
 
 ---
 
@@ -124,7 +124,7 @@ def main(config: DictConfig, logger: MLFlowLogger) -> None:
 ```
 
 | Auto-captured | Details |
-|---|---|
+| --- | --- |
 | **User** | Resolved from `MLFLOW_USER` env → git config → linked to `User_Registry` run |
 | **Dataset** | Latest `Dataset_Registry` run, file sizes verified |
 | **Train/test split** | Manifest auto-discovered, CSVs saved as artifacts |
@@ -156,7 +156,7 @@ trainer = Trainer(callbacks=[callback], ...)
 ```
 
 | Parameter | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `model_name` | `None` | Model identifier (used in artifact paths) |
 | `experiment_name` | `"Training_Pipeline"` | MLflow experiment name |
 | `manifest_path` | auto-discover | Path to `manifest.csv` |
@@ -168,6 +168,35 @@ trainer = Trainer(callbacks=[callback], ...)
 | `register_model` | `True` | Register model architecture to MLflow |
 | `register_optimizer` | `True` | Register optimizer config to MLflow |
 | `register_scheduler` | `True` | Register scheduler config to MLflow |
+| `split_uris` | `None` | Precomputed split CSV URIs (`mlflow-artifacts:/...` or local paths) from an upstream preprocessing pipeline. When given, splits are *referenced* — never recomputed or copied — and `test_size`/`manifest_path` splitting is skipped |
+| `prov_prefixes` | `None` | Override PROV namespace prefixes for the generated document |
+
+### Preprocessing provenance
+
+For dataset pipelines (pandas + Hydra, outside Lightning), use the
+function-level API instead of callbacks:
+
+```python
+from rationai.mlkit.provenance import (
+    log_dataset_provenance,
+    log_split_provenance,
+)
+
+@with_cli_args
+@hydra.main(config_path="configs", config_name="preprocess", version_base=None)
+@autolog
+def main(config: DictConfig, logger: MLFlowLogger) -> None:
+    df = build_dataset(config)
+    log_dataset_provenance(df, logger, config, dataset_name="cohort_01", positive_label="")
+
+    splits = make_splits(df, config)
+    log_split_provenance(splits, logger, config, dataset_name="cohort_01", version="1.0.0")
+```
+
+Training then consumes the pipeline's split artifacts via
+`ProvenanceCallback(split_uris={...})` — see
+[examples/example_preprocessing_pipeline.py](examples/example_preprocessing_pipeline.py)
+for the full pattern (one source of truth for splits).
 
 #### EnvironmentCallback
 
@@ -294,7 +323,7 @@ dataset = MetaTiledSlides(
 ### Lightning integration
 
 | Component | Import | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `Trainer` | `from rationai.mlkit import Trainer` | Lightning Trainer with MLflow checkpoint sync |
 | `MLFlowLogger` | `from rationai.mlkit import MLFlowLogger` | Logger with git tags, stream capture, checkpoint sync |
 | `MultiloaderLifecycle` | `from rationai.mlkit import MultiloaderLifecycle` | Per-dataloader callback hooks |
@@ -309,9 +338,13 @@ dataset = MetaTiledSlides(
 
 ```text
 .
-├── example_provenance_setup.py        # Setup: register users & dataset
-├── example_provenance_train.py        # Training with @autolog + ProvenanceCallback
-├── example_provenance_train_cfg.yaml  # Hydra config for the training example
+├── examples/                          # Runnable example scripts
+│   ├── example_provenance_setup.py        # Setup: register users & dataset
+│   ├── example_provenance_train.py        # Training with @autolog + ProvenanceCallback
+│   ├── example_provenance_train_cfg.yaml  # Hydra config for the training example
+│   ├── example_preprocessing_pipeline.py  # Preprocessing-side provenance pattern
+│   └── example_provenance_test.py         # Env-capture entry points sanity script
+├── tests/                             # pytest suite (golden PROV files in tests/golden/)
 ├── pyproject.toml                     # Project metadata + deps
 ├── test_data/                         # Dummy datasets (gitignored)
 └── rationai/
@@ -319,10 +352,15 @@ dataset = MetaTiledSlides(
         ├── __init__.py                # Package exports (lazy loading)
         ├── autolog.py                 # @autolog decorator for Hydra scripts
         ├── with_cli_args.py           # Programmatic config injection
-        ├── provenance/                # Dataset & user registration
+        ├── provenance/                # Registration, capture & PROV builders
         │   ├── __init__.py
-        │   ├── register_dataset.py    # register_dataset, verify_dataset
-        │   └── register_user.py       # register_new_user
+        │   ├── common.py              # shared PROV helpers + prefixes
+        │   ├── user.py                # register_new_user, build_user_prov
+        │   ├── dataset.py             # register_dataset, verify_dataset, build_dataset_prov
+        │   ├── environment.py         # capture_environment, snapshot_environment, detectors
+        │   ├── run.py                 # build_training_run_prov
+        │   ├── log_dataset.py         # log_dataset_provenance (preprocessing pipelines)
+        │   └── log_split.py           # log_split_provenance, build_split_prov
         ├── stream/                    # ANSI-aware console capture
         │   ├── stream_capture.py
         │   ├── stream_logger.py
@@ -342,7 +380,6 @@ dataset = MetaTiledSlides(
         │       └── slides_tiles_loader.py
         └── lightning/                 # Lightning + Hydra integration
             ├── trainer.py
-            ├── with_cli_args.py
             ├── callbacks/
             │   ├── provenance.py      # ProvenanceCallback
             │   ├── environment.py     # EnvironmentCallback
@@ -354,10 +391,28 @@ dataset = MetaTiledSlides(
 
 ---
 
+## Testing
+
+```bash
+uv run pytest tests/ -q
+```
+
+PROV builder output is pinned by golden files in `tests/golden/`. Regenerate
+them intentionally (after a deliberate PROV change) with:
+
+```bash
+MLKIT_UPDATE_GOLDEN=1 uv run pytest tests/test_prov_builders.py
+```
+
+Unit tests use a local MLflow file store via the `mlflow_store` fixture — no
+tracking server needed.
+
+---
+
 ## MLflow experiments
 
 | Experiment | Purpose |
-|---|---|
+| --- | --- |
 | `User_Registry` | Stores user identity runs (username, real name, org) |
 | `Dataset_Registry` | Stores dataset manifest runs with file provenance |
 | `Training_Pipeline` | Training runs with full auto-captured provenance |
@@ -380,7 +435,7 @@ The document uses a bundle wrapper (`{"bundle": {"storage:<run_id>": {...}}}`)
 with 10 namespace prefixes and 7 sections:
 
 | Section | Purpose |
-|---|---|
+| --- | --- |
 | `prefix` | Namespace URIs (`gen:`, `schema:`, `cpm:`, `prov:`, `sosa:`, …) |
 | `entity` | Input data (dataset/WSI as `sosa:Sample`), metadata bundle (`cpm:BundleMetadata`) |
 | `activity` | Training run (`schema:Action`) with hyperparameters, hardware, git commit; CPM wrapper (`cpm:mainActivity`) |
@@ -392,7 +447,7 @@ with 10 namespace prefixes and 7 sections:
 ### PROV elements
 
 | Element | ID Pattern | Type | Content |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Agent | `gen:user_<username>` | `schema:Person` | Name, email, affiliation |
 | Dataset Entity | `gen:dataset_<id>` | `sosa:Sample` | Input data (or WSI if path available) |
 | Run Activity | `gen:run_<run_id>` | `schema:Action` | Hyperparams, hardware, git, optimizer/scheduler settings |

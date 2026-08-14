@@ -73,6 +73,16 @@ class DatasetVerificationCallback(Callback):
         self._verification: dict[str, Any] | None = None
         self._split_data: dict[str, Any] | None = None
 
+    @property
+    def verification(self) -> dict[str, Any] | None:
+        """Verification result (None before fit start / when skipped)."""
+        return self._verification
+
+    @property
+    def split_data(self) -> dict[str, Any] | None:
+        """Train/test split data (None when no split was performed)."""
+        return self._split_data
+
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         """Verify the dataset and optionally split into train/test.
 
@@ -85,9 +95,9 @@ class DatasetVerificationCallback(Callback):
         self._done = True
 
         from rationai.mlkit.provenance.dataset import (
-            _detect_manifest,
-            _lookup_dataset_run,
-            _verify_dataset,
+            detect_manifest,
+            lookup_dataset_run,
+            verify_manifest,
         )
         from rationai.mlkit.provenance.dataset import (
             load_manifest as _load_manifest,
@@ -96,7 +106,7 @@ class DatasetVerificationCallback(Callback):
         manifest_path = self._manifest_path
         data_root = None
         if manifest_path is None:
-            manifest_path, data_root = _detect_manifest()
+            manifest_path, data_root = detect_manifest()
 
         if manifest_path is None:
             log.warning(
@@ -108,8 +118,8 @@ class DatasetVerificationCallback(Callback):
             data_root = os.path.dirname(os.path.abspath(manifest_path))
 
         # ── Verification ────────────────────────────────────────
-        dataset_run_id = _lookup_dataset_run()
-        verification = _verify_dataset(manifest_path, data_root, dataset_run_id)
+        dataset_run_id = lookup_dataset_run()
+        verification = verify_manifest(manifest_path, data_root, dataset_run_id)
         self._verification = verification
 
         for detail in verification.get("details", []):

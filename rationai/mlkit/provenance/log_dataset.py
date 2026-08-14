@@ -3,17 +3,20 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import mlflow
 import pandas as pd
 from omegaconf import DictConfig
 
-from rationai.mlkit.lightning.loggers import MLFlowLogger
 from rationai.mlkit.provenance.dataset import build_dataset_prov
 from rationai.mlkit.provenance.environment import capture_environment
+
+
+if TYPE_CHECKING:
+    from rationai.mlkit.lightning.loggers import MLFlowLogger
 
 
 def log_dataset_provenance(
@@ -21,18 +24,37 @@ def log_dataset_provenance(
     logger: MLFlowLogger,
     config: DictConfig,
     *,
-    dataset_name: str = "ulcerative-colitis-dysplasia",
+    dataset_name: str,
+    positive_label: str,
     version: str = "1.0.0",
-    positive_label: str = "NEGATIVE",
     path_column: str = "slide_path",
     label_column: str = "annot_path",
     snapshot_env: bool = True,
 ) -> dict[str, Any]:
-    """Log dataset metadata + PROV document + CSV manifest to active MLflow run."""
+    """Log dataset metadata + PROV document + CSV manifest to active MLflow run.
+
+    Args:
+        dataset: Dataset dataframe with at least ``path_column`` and ``label_column``.
+        logger: MLFlowLogger of the current run.
+        config: Hydra config (uses ``data_path`` for the PROV document root).
+        dataset_name: Human-readable dataset name (tag + PROV).
+        positive_label: Value of ``label_column`` that counts as the
+            *negative* class; every other value counts as positive.
+        version: Dataset version string.
+        path_column: Column with slide file paths.
+        label_column: Column with annotation/label values.
+        snapshot_env: Whether to snapshot the python environment.
+    """
     # ── Environment ────────────────────────────────────────
     capture_environment(snapshot_env=snapshot_env)
 
     # ── Metadata ───────────────────────────────────────────
+    for column in (path_column, label_column):
+        if column not in dataset.columns:
+            raise ValueError(
+                f"Dataset is missing required column {column!r}; "
+                f"available columns: {list(dataset.columns)}"
+            )
     num_samples = len(dataset)
     num_positive = int((dataset[label_column] != positive_label).sum())
     num_negative = num_samples - num_positive
@@ -47,9 +69,16 @@ def log_dataset_provenance(
         fpath = Path(slide_path_str)
 
         if fpath.exists():
-            stat = fpath.stat()
-            size = int(stat.st_size)
-            mtime_iso = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                stat = fpath.stat()
+            except OSError:
+                size = -1
+                mtime_iso = "unknown"
+            else:
+                size = int(stat.st_size)
+                mtime_iso = datetime.fromtimestamp(stat.st_mtime, tz=UTC).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
         else:
             size = -1
             mtime_iso = "unknown"
