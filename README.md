@@ -344,7 +344,6 @@ dataset = MetaTiledSlides(
 │   ├── example_provenance_train_cfg.yaml  # Hydra config for the training example
 │   ├── example_preprocessing_pipeline.py  # Preprocessing-side provenance pattern
 │   └── example_provenance_test.py         # Env-capture entry points sanity script
-├── tests/                             # pytest suite (golden PROV files in tests/golden/)
 ├── pyproject.toml                     # Project metadata + deps
 ├── test_data/                         # Dummy datasets (gitignored)
 └── rationai/
@@ -388,24 +387,6 @@ dataset = MetaTiledSlides(
             └── loggers/
                 └── mlflow.py          # MLFlowLogger (checkpoint sync, git tags)
 ```
-
----
-
-## Testing
-
-```bash
-uv run pytest tests/ -q
-```
-
-PROV builder output is pinned by golden files in `tests/golden/`. Regenerate
-them intentionally (after a deliberate PROV change) with:
-
-```bash
-MLKIT_UPDATE_GOLDEN=1 uv run pytest tests/test_prov_builders.py
-```
-
-Unit tests use a local MLflow file store via the `mlflow_store` fixture — no
-tracking server needed.
 
 ---
 
