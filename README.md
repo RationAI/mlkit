@@ -173,25 +173,34 @@ trainer = Trainer(callbacks=[callback], ...)
 
 ### Preprocessing provenance
 
-For dataset pipelines (pandas + Hydra, outside Lightning), use the
-function-level API instead of callbacks:
+For pipelines outside Lightning, `log_provenance` captures provenance for
+any run type (dataset creation, masking, tiling, embeddings, …) — every
+argument is optional and derives from the Hydra config and active run:
 
 ```python
-from rationai.mlkit.provenance import (
-    log_dataset_provenance,
-    log_split_provenance,
-)
+from rationai.mlkit.provenance import log_provenance
 
 @with_cli_args
 @hydra.main(config_path="configs", config_name="preprocess", version_base=None)
 @autolog
 def main(config: DictConfig, logger: MLFlowLogger) -> None:
     df = build_dataset(config)
-    log_dataset_provenance(df, logger, config, dataset_name="cohort_01", positive_label="")
+    # name <- config.dataset.name -> run name; version <- config.dataset.version
+    log_provenance(df, logger, config, positive_label="")
 
-    splits = make_splits(df, config)
-    log_split_provenance(splits, logger, config, dataset_name="cohort_01", version="1.0.0")
+    # split run: one output entity per split in the PROV document
+    log_provenance(
+        {"train": train_df, "test": test_df}, logger, config,
+    )
 ```
+
+Per call it logs: environment/git/hardware/seeds, flattened scalar config
+leaves as params (cfg_*), row/column stats (+ file manifest and label
+breakdown when path/label columns are detected), upstream inputs
+(explicit `inputs=[...]` plus any `mlflow-artifacts:/` URI found in the
+config) as a PROV `used` chain, and a self-contained PROV-O document at
+`provenance/prov.json`. Works for runs with no dataframe output too:
+`log_provenance(logger=logger, config=config)`.
 
 Training then consumes the pipeline's split artifacts via
 `ProvenanceCallback(split_uris={...})` — see
