@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
+import numpy as np
+import pyarrow as pa
 from datasets import Dataset as HFDataset
 from torch.utils.data import ConcatDataset, Dataset
-
-from rationai.mlkit.data.datasets.slides_tiles_loader import SlidesTilesLoader
 
 
 T = TypeVar("T", covariant=True)
@@ -25,52 +24,41 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
 
     def __init__(
         self,
-        *,
-        paths: Iterable[Path | str] | None = None,
-        uris: Iterable[str] | None = None,
-        slides_and_tiles: tuple[HFDataset, HFDataset] | None = None,
-        hf_kwargs: dict[str, Any] | None = None,
+        slides: HFDataset,
+        tiles: HFDataset
     ) -> None:
         """Load slides and tiles from MLFlow artifacts.
 
         Args:
-            paths: List of directories to load slides and tiles from. Each
-                directory must include either single files (`slides.parquet`
-                and `tiles.parquet`) or subdirectories (`slides/` and `tiles/`)
-                containing chunked Parquet files.
-            uris: List of MLFlow artifact URIs pointing to folders containing
-                either single files (`slides.parquet` and `tiles.parquet`) or
-                subdirectories (`slides/` and `tiles/`) containing chunked
-                Parquet files.
-            slides_and_tiles: Tuple containing the slides and tiles Datasets.
-            hf_kwargs: Additional keyword arguments to pass to HuggingFace's
-                `load_dataset` function. Defaults to `{"path": "parquet", "split": "train"}`.
+            slides: Dataset containing slide metadata.
+            tiles: Dataset containing tile metadata.
         """
-        self._meta = SlidesTilesLoader(
-            paths=paths,
-            uris=uris,
-            slides_and_tiles=slides_and_tiles,
-            hf_kwargs=hf_kwargs,
-        )
-        self.slides = self._meta.slides
-        self.tiles = self._meta.tiles
+        self.slides = slides
+        self.tiles = tiles
+
+        self._slide_id_to_indices = self._build_tile_index(self.tiles)
+
         super().__init__(self.generate_datasets())
 
     def filter_tiles_by_slide(self, slide_id: str | bytes) -> HFDataset:
-        """Returns a view of the dataset using a slice or indices.
+            """Returns a view of the dataset using a slice or indices.
+    
+            This function creates a view of the `self.tiles` dataset that contains only
+            the tiles belonging to the specified slide. It uses the precomputed
+            `_slide_id_to_indices` mapping to efficiently retrieve the relevant tiles
+            without copying data.
+    
+            Args:
+                slide_id: The ID of the slide to filter tiles.
+    
+            Returns:
+                A view of the tiles dataset containing only the tiles for the specified slide.
+            """
+            tile_indices = self._slide_id_to_indices.get(
+                slide_id, pa.scalar([], type=pa.list_(pa.int64()))
+            )
+            return self.tiles.select(tile_indices.values.to_numpy())
 
-        This function creates a view of the `self.tiles` dataset that contains only
-        the tiles belonging to the specified slide. It uses the precomputed
-        `_slide_id_to_indices` mapping to efficiently retrieve the relevant tiles
-        without copying data.
-
-        Args:
-            slide_id: The ID of the slide to filter tiles.
-
-        Returns:
-            A view of the tiles dataset containing only the tiles for the specified slide.
-        """
-        return self._meta.filter_tiles_by_slide(slide_id)
 
     @abstractmethod
     def generate_datasets(self) -> Iterable[Dataset[T]]:
@@ -90,3 +78,43 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
             )
             ```
         """
+
+    @staticmethod
+    def _build_tile_index(tiles: HFDataset) -> dict[str | bytes, pa.ListScalar]:
+        """Creates a fast lookup table for slide indices.
+
+        This function builds a mapping from `slide_id` to the list of indices in the
+        `tiles` dataset that correspond to that slide.
+
+        Args:
+            tiles: A dataset containing a `slide_id` column.
+
+        Returns:
+            A dictionary mapping each `slide_id` to a list of indices in the `tiles` dataset.
+        """
+        if len(tiles) == 0:
+            return {}
+
+        slide_ids = tiles.data.column("slide_id")
+        num_rows = len(slide_ids)
+
+        # group_by requires the "large" variants for string/binary columns
+        current_type = slide_ids.type
+        if pa.types.is_string(current_type):
+            slide_ids = slide_ids.cast(pa.large_string())
+        elif pa.types.is_binary(current_type):
+            slide_ids = slide_ids.cast(pa.large_binary())
+
+        # np.arange is used here because PyArrow can wrap it with zero-copy overhead
+        row_indices = pa.array(np.arange(num_rows, dtype=np.int64))
+        table = pa.Table.from_arrays(
+            [slide_ids, row_indices], names=["slide_id", "idx"]
+        )
+
+        # "list" aggregates all indices for a given slide_id into a single Arrow List scalar
+        grouped = table.group_by("slide_id").aggregate([("idx", "list")])
+
+        # Keep values as PyArrow ListScalars to avoid materializing them in Python
+        keys = grouped.column("slide_id").to_numpy()
+        values_array = grouped.column("idx_list")
+        return {key: values_array[i] for i, key in enumerate(keys)}
