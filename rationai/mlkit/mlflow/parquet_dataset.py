@@ -4,7 +4,6 @@ import logging
 from functools import cached_property
 from typing import Any
 
-import pyarrow as pa
 import pyarrow.dataset as ds
 from mlflow.data.dataset import Dataset
 from mlflow.data.dataset_source import DatasetSource
@@ -16,7 +15,7 @@ _logger = logging.getLogger(__name__)
 
 
 class ParquetDataset(Dataset):
-    """Represents a lazy-loaded Parquet dataset with MLflow Tracking."""
+    """Lazy-loaded Parquet dataset (single file or sharded directory) with MLflow tracking."""
 
     def __init__(
         self,
@@ -25,7 +24,7 @@ class ParquetDataset(Dataset):
         target_col: str | None = None,
         name: str | None = None,
         digest: str | None = None,
-    ):
+    ) -> None:
         """Initializes the ParquetDataset.
 
         Args:
@@ -38,63 +37,48 @@ class ParquetDataset(Dataset):
         """
         self._path = path
         self._target_col = target_col
-
-        # Lazily load the dataset metadata without reading the data into memory
         self._ds = ds.dataset(self._path, format="parquet")
-
         super().__init__(source=source, name=name, digest=digest)
 
-    def _compute_digest(self) -> str:
-        """Computes a fast digest for the dataset based on schema and file paths."""
-        hasher = hashlib.md5(usedforsecurity=False)
+    # ── MLflow Dataset interface ──────────────────────────────────────────────
 
-        # Hash the schema structure
-        hasher.update(str(self._ds.schema).encode("utf-8"))
-
-        # Hash the sorted file paths to detect added/removed chunks
-        for file in sorted(self._ds.files):
-            hasher.update(file.encode("utf-8"))
-
-        return hasher.hexdigest()
-
-    def to_dict(self) -> dict[str, str]:
-        """Create config dictionary for the dataset."""
-        config = super().to_dict()
-        config.update(
-            {
-                "schema": json.dumps({"mlflow_colspec": self.schema.to_dict()}),
-                "profile": json.dumps(self.profile),
-            }
-        )
-        return config
+    @property
+    def data_type(self) -> str:
+        return "parquet"
 
     @property
     def source(self) -> DatasetSource:
-        """The source of the dataset."""
         return self._source
 
     @property
-    def dataset(self) -> ds.Dataset:
-        """The underlying pyarrow Dataset object."""
-        return self._ds
-
-    @property
     def target_col(self) -> str | None:
-        """The name of the target column, if specified."""
         return self._target_col
 
-    @cached_property
-    def profile(self) -> Any:
-        """A profile of the dataset metadata.
+    @property
+    def dataset(self) -> ds.Dataset:
+        return self._ds
 
-        Reads Parquet footers to instantly get row counts and structural metadata
-        without loading the actual data blocks into memory.
-        """
-        # count_rows() sums footer row counts (falling back to a scan only when
-        # metadata is unavailable) using pyarrow's multi-threaded C++ implementation,
-        # which is much faster than a Python-level fragment loop for many shards.
-        total_rows = self._ds.count_rows()
+    # ── digest ────────────────────────────────────────────────────────────────
 
+    def _compute_digest(self) -> str:
+        """Fast metadata-based digest — hashes schema + sorted file paths, never reads data."""
+        hasher = hashlib.md5()
+        hasher.update(str(self._ds.schema).encode())
+        for f in sorted(self._ds.files):
+            hasher.update(f.encode())
+        return hasher.hexdigest()
+
+    # ── profile ───────────────────────────────────────────────────────────────
+
+    @property
+    def profile(self) -> dict[str, Any]:
+        """Row counts and structural metadata read from Parquet footers (no data blocks loaded)."""
+        total_rows = 0
+        for fragment in self._ds.get_fragments():
+            if hasattr(fragment, "metadata") and fragment.metadata is not None:
+                total_rows += fragment.metadata.num_rows
+            else:
+                total_rows += fragment.count_rows()
         return {
             "num_files": len(self._ds.files),
             "total_rows": total_rows,
@@ -102,20 +86,103 @@ class ParquetDataset(Dataset):
             "backend_format": "parquet",
         }
 
-    @cached_property
-    def schema(self) -> Schema:
-        """MLflow Schema representing the dataset features."""
-        try:
-            # Create an empty PyArrow Table from the schema and convert to Pandas.
-            empty_df = pa.Table.from_batches([], schema=self._ds.schema).to_pandas()
-            inferred_schema = _infer_schema(empty_df)
-            return inferred_schema
-        except Exception as e:
-            _logger.warning(
-                f"Failed to infer schema for Parquet dataset. Exception: {e}"
-            )
-            return Schema([])
+    # ── schema ────────────────────────────────────────────────────────────────
 
+    @cached_property
+    def schema(self) -> Schema | None:
+        try:
+            import pyarrow as pa
+            from mlflow.types.schema import Array, ColSpec, DataType, TensorSpec
+
+            pa_schema = self._ds.schema
+
+            def _is_scalar(t: pa.DataType) -> bool:
+                return (
+                    pa.types.is_integer(t) or pa.types.is_floating(t)
+                    or pa.types.is_boolean(t) or pa.types.is_string(t)
+                    or pa.types.is_large_string(t) or pa.types.is_binary(t)
+                    or pa.types.is_date(t) or pa.types.is_timestamp(t)
+                )
+
+            def _leaf_dtype(t: pa.DataType) -> DataType | None:
+                if pa.types.is_boolean(t):
+                    return DataType.boolean
+                if pa.types.is_integer(t):
+                    return DataType.long
+                if pa.types.is_floating(t):
+                    return DataType.double
+                return None
+
+            def _array_colspec(field: pa.Field) -> ColSpec | None:
+                """Build a nested Array ColSpec for fixed-shape tensor/list columns.
+
+                MLflow's Schema requires all-ColSpec or all-TensorSpec — never mixed —
+                so array/tensor columns are represented as ColSpec(Array(...)) rather
+                than TensorSpec, to stay homogeneous with the scalar columns below.
+                """
+                t = field.type
+                # Tensor extension types (Ray's ArrowTensorType, PyArrow's native
+                # fixed_shape_tensor) expose .shape plus a leaf element type — Ray uses
+                # .scalar_type, PyArrow uses .value_type. Their .storage_type is a
+                # *flattened* list (e.g. large_list<uint8>), so it can't be used to
+                # recover per-dimension shape and must not be unwrapped for ndims.
+                if isinstance(t, pa.ExtensionType):
+                    shape = getattr(t, "shape", None)
+                    leaf_type = getattr(t, "scalar_type", None) or getattr(t, "value_type", None)
+                    if shape is not None and leaf_type is not None:
+                        leaf = _leaf_dtype(leaf_type)
+                        if leaf is not None:
+                            arr: DataType | Array = leaf
+                            for _ in range(len(shape)):
+                                arr = Array(arr)
+                            return ColSpec(arr, name=field.name)
+                    t = t.storage_type  # unknown extension: fall through as a plain list
+                dims = 0
+                while pa.types.is_fixed_size_list(t) or pa.types.is_list(t) or pa.types.is_large_list(t):
+                    dims += 1
+                    t = t.value_type
+                if dims == 0:
+                    return None
+                leaf = _leaf_dtype(t)
+                if leaf is None:
+                    return None
+                arr = leaf
+                for _ in range(dims):
+                    arr = Array(arr)
+                return ColSpec(arr, name=field.name)
+
+            scalar_fields = [f for f in pa_schema if _is_scalar(f.type)]
+            array_specs = [
+                spec for f in pa_schema
+                if not _is_scalar(f.type)
+                if (spec := _array_colspec(f)) is not None
+            ]
+
+            if not scalar_fields and not array_specs:
+                return None
+
+            specs: list[ColSpec | TensorSpec] = list(array_specs)
+            if scalar_fields:
+                empty_table = pa.table({f.name: pa.array([], type=f.type) for f in scalar_fields})
+                scalar_schema = _infer_schema(empty_table.to_pandas())
+                specs = list(scalar_schema.inputs) + specs
+
+            return Schema(specs)
+        except Exception as exc:
+            _logger.warning("Failed to infer schema for Parquet dataset: %s", exc)
+            return None
+
+    # ── serialisation ─────────────────────────────────────────────────────────
+
+    def to_dict(self) -> dict[str, str]:
+        config = super().to_dict()
+        if self.schema is not None:
+            config["schema"] = json.dumps({"mlflow_colspec": self.schema.to_dict()})
+        config["profile"] = json.dumps(self.profile)
+        return config
+
+
+# ── factory ───────────────────────────────────────────────────────────────────
 
 def from_parquet(
     path: str,
@@ -124,43 +191,20 @@ def from_parquet(
     name: str | None = None,
     digest: str | None = None,
 ) -> ParquetDataset:
-    """Constructs a ParquetDataset object from a single Parquet file or directory.
+    """Construct a ParquetDataset from a single file or a directory of shards.
 
-    Args:
-        path: Path to the Parquet file or directory of Parquet chunks.
-        source: The source from which the dataset was derived.
-        target_col: Optional column name for the target.
-        name: The name of the dataset.
-        digest: The dataset digest (hash). If unspecified, a metadata digest is computed.
+    Example::
 
-    Example:
-
-    .. code-block:: python
-        import mlflow
-
-        # Works for both a single file and a directory of chunks
-        dataset = from_parquet(
-            path="/path/to/massive_dataset.parquet", target_col="label"
-        )
-        mlflow.log_input(dataset, context="training")
+        dataset = from_parquet("/path/to/tiles/", target_col="tumor")
+        mlflow.log_input(dataset, context="tiles")
     """
     from mlflow.data.code_dataset_source import CodeDatasetSource
     from mlflow.data.dataset_source_registry import resolve_dataset_source
     from mlflow.tracking.context import registry
 
     if source is not None:
-        if isinstance(source, DatasetSource):
-            resolved_source = source
-        else:
-            resolved_source = resolve_dataset_source(source)
+        resolved_source = source if isinstance(source, DatasetSource) else resolve_dataset_source(source)
     else:
-        context_tags = registry.resolve_tags()
-        resolved_source = CodeDatasetSource(tags=context_tags)
+        resolved_source = CodeDatasetSource(tags=registry.resolve_tags())
 
-    return ParquetDataset(
-        path=path,
-        source=resolved_source,
-        target_col=target_col,
-        name=name,
-        digest=digest,
-    )
+    return ParquetDataset(path=path, source=resolved_source, target_col=target_col, name=name, digest=digest)
