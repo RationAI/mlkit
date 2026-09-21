@@ -1,0 +1,232 @@
+digraph G {
+rankdir=BT;
+charset="utf-8";
+n1 [label="gen:run_b9db50805a2b4b21b02608092032eb3c", URL="gen/run_b9db50805a2b4b21b02608092032eb3c", shape=box, style=filled, fillcolor="#9FB1FC", color="#0000FF"];
+ann1 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#startTime">prov:startTime</TD>
+        <TD align="left">2026-09-21T08:26:39.521000+00:00</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#endTime">prov:endTime</TD>
+        <TD align="left">2026-09-21T08:26:39.660000+00:00</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://purl.org/dc/terms/description">dct:description</TD>
+        <TD align="left"></TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/identifier">schema:identifier</TD>
+        <TD align="left">b9db50805a2b4b21b02608092032eb3c</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">Train vgg16</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann1 -> n1 [arrowhead=none, style=dashed, color=gray];
+n2 [label="gen:user_borisim", URL="gen/user_borisim", shape=house, style=filled, fillcolor="#FED37F"];
+ann2 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="https://schema.org/affiliation">schema:affiliation</TD>
+        <TD align="left">RationAI</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">borisim</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann2 -> n2 [arrowhead=none, style=dashed, color=gray];
+n3 [label="gen:model_b9db50805a2b4b21b02608092032eb3c", URL="gen/model_b9db50805a2b4b21b02608092032eb3c", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann3 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="http://www.w3.org/ns/prov#Entity">prov:Entity</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="https://schema.org/CreativeWork">schema:CreativeWork</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://purl.org/dc/terms/description">dct:description</TD>
+        <TD align="left">Trained model produced by Train vgg16 (artifact hint &#x27;mlmodel&#x27;)</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">model of Train vgg16</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/url">schema:url</TD>
+        <TD align="left">file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann3 -> n3 [arrowhead=none, style=dashed, color=gray];
+n4 [label="gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles", URL="gen/input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann4 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/url">schema:url</TD>
+        <TD align="left">mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann4 -> n4 [arrowhead=none, style=dashed, color=gray];
+n5 [label="gen:annotation_params_b9db50805a2b4b21b02608092032eb3c", URL="gen/annotation_params_b9db50805a2b4b21b02608092032eb3c", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann5 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="http://www.w3.org/ns/prov#Annotation">prov:Annotation</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#annotatedEntity">prov:annotatedEntity</TD>
+        <TD align="left" href="gen/run_b9db50805a2b4b21b02608092032eb3c">gen:run_b9db50805a2b4b21b02608092032eb3c</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#annotation">prov:annotation</TD>
+        <TD align="left">{&quot;input_tiles&quot;: &quot;mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles&quot;, &quot;lr&quot;: &quot;0.001&quot;}</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann5 -> n5 [arrowhead=none, style=dashed, color=gray];
+n6 [label="gen:run_2d8ac7db09cf408cbeb3bc60f54713f4", URL="gen/run_2d8ac7db09cf408cbeb3bc60f54713f4", shape=box, style=filled, fillcolor="#9FB1FC", color="#0000FF"];
+ann6 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#startTime">prov:startTime</TD>
+        <TD align="left">2026-09-21T08:26:39.409000+00:00</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#endTime">prov:endTime</TD>
+        <TD align="left">2026-09-21T08:26:39.513000+00:00</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://purl.org/dc/terms/description">dct:description</TD>
+        <TD align="left">tile cutting from a VSI directory</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/identifier">schema:identifier</TD>
+        <TD align="left">2d8ac7db09cf408cbeb3bc60f54713f4</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">Create dataset</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann6 -> n6 [arrowhead=none, style=dashed, color=gray];
+n7 [label="gen:output_2d8ac7db09cf408cbeb3bc60f54713f4", URL="gen/output_2d8ac7db09cf408cbeb3bc60f54713f4", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann7 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="http://www.w3.org/ns/sosa/Sample">sosa:Sample</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://purl.org/dc/terms/description">dct:description</TD>
+        <TD align="left">Output of Create dataset</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">Create dataset</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/url">schema:url</TD>
+        <TD align="left">file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann7 -> n7 [arrowhead=none, style=dashed, color=gray];
+n8 [label="gen:annotation_params_2d8ac7db09cf408cbeb3bc60f54713f4", URL="gen/annotation_params_2d8ac7db09cf408cbeb3bc60f54713f4", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann8 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="http://www.w3.org/ns/prov#Annotation">prov:Annotation</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#annotatedEntity">prov:annotatedEntity</TD>
+        <TD align="left" href="gen/run_2d8ac7db09cf408cbeb3bc60f54713f4">gen:run_2d8ac7db09cf408cbeb3bc60f54713f4</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#annotation">prov:annotation</TD>
+        <TD align="left">{&quot;n_slides&quot;: &quot;12&quot;}</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann8 -> n8 [arrowhead=none, style=dashed, color=gray];
+n9 [label="meta:b9db50805a2b4b21b02608092032eb3c", URL="http://localhost:8083/api/v1/documents/meta/b9db50805a2b4b21b02608092032eb3c", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann9 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="https://www.commonprovenancemodel.org/cpm-namespace-v1-0/BundleMetadata">cpm:BundleMetadata</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://www.commonprovenancemodel.org/cpm-namespace-v1-0/organization">cpm:organization</TD>
+        <TD align="left">RationAI</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="gen/input_uris">gen:input_uris</TD>
+        <TD align="left">[&quot;mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles&quot;]</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="gen/output_name">gen:output_name</TD>
+        <TD align="left">Train vgg16</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="gen/run_name">gen:run_name</TD>
+        <TD align="left">Train vgg16</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann9 -> n9 [arrowhead=none, style=dashed, color=gray];
+n10 [label="blank:Run_b9db50805a", URL="https://openprovenance.org/blank/Run_b9db50805a", shape=box, style=filled, fillcolor="#9FB1FC", color="#0000FF"];
+ann10 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="https://www.commonprovenancemodel.org/cpm-namespace-v1-0/mainActivity">cpm:mainActivity</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://www.commonprovenancemodel.org/cpm-namespace-v1-0/referencedMetaBundleId">cpm:referencedMetaBundleId</TD>
+        <TD align="left" href="http://localhost:8083/api/v1/documents/meta/b9db50805a2b4b21b02608092032eb3c">meta:b9db50805a2b4b21b02608092032eb3c</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://www.commonprovenancemodel.org/cpm-namespace-v1-0/referencedMetaspectVersion">cpm:referencedMetaspectVersion</TD>
+        <TD align="left">TODO:referencedMetaspectVersion</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://purl.org/dc/terms/hasPart">dct:hasPart</TD>
+        <TD align="left" href="gen/run_2d8ac7db09cf408cbeb3bc60f54713f4">gen:run_2d8ac7db09cf408cbeb3bc60f54713f4</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="http://purl.org/dc/terms/hasPart">dct:hasPart</TD>
+        <TD align="left" href="gen/run_b9db50805a2b4b21b02608092032eb3c">gen:run_b9db50805a2b4b21b02608092032eb3c</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann10 -> n10 [arrowhead=none, style=dashed, color=gray];
+n11 [label="gen:forward_b9db50805a2b4b21b02608092032eb3c", URL="gen/forward_b9db50805a2b4b21b02608092032eb3c", shape=oval, style=filled, fillcolor="#FFFC87", color="#808080"];
+ann11 [label=<<TABLE cellpadding="0" border="0">
+    <TR>
+        <TD align="left" href="http://www.w3.org/ns/prov#type">prov:type</TD>
+        <TD align="left" href="https://www.commonprovenancemodel.org/cpm-namespace-v1-0/forwardConnector">cpm:forwardConnector</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/name">schema:name</TD>
+        <TD align="left">file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel</TD>
+    </TR>
+    <TR>
+        <TD align="left" href="https://schema.org/url">schema:url</TD>
+        <TD align="left">file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel</TD>
+    </TR>
+    </TABLE>>, shape=note, color=gray, fontcolor=black, fontsize=10];
+ann11 -> n11 [arrowhead=none, style=dashed, color=gray];
+b1 [label="", shape=point, color=gray];
+n1 -> b1 [arrowhead=none, label=wasAssociatedWith, fontsize=10.0, color="#FED37F"];
+b1 -> n2 [fontsize=10.0, color="#FED37F"];
+n1 -> n2 [label=wasAttributedTo, fontsize=10.0, color="#FED37F"];
+n3 -> n1 [label=wasGeneratedBy, fontsize=10.0, color=darkgreen, fontcolor=darkgreen];
+n1 -> n4 [label=used, fontsize=10.0, color=red4, fontcolor=red];
+b2 [label="", shape=point, color=gray];
+n4 -> b2 [arrowhead=none, label=wasDerivedFrom, fontsize=10.0];
+b2 -> n7 [fontsize=10.0];
+b3 [label="", shape=point, color=gray];
+n6 -> b3 [arrowhead=none, label=wasAssociatedWith, fontsize=10.0, color="#FED37F"];
+b3 -> n2 [fontsize=10.0, color="#FED37F"];
+n6 -> n2 [label=wasAttributedTo, fontsize=10.0, color="#FED37F"];
+n7 -> n6 [label=wasGeneratedBy, fontsize=10.0, color=darkgreen, fontcolor=darkgreen];
+n11 -> n10 [label=wasGeneratedBy, fontsize=10.0, color=darkgreen, fontcolor=darkgreen];
+n11 -> n3 [label=specializationOf, fontsize=10.0];
+}

@@ -1,0 +1,14 @@
+artifact_uri: file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts
+end_time: 1789979199660
+entry_point_name: ''
+experiment_id: '160907218636845954'
+lifecycle_stage: active
+run_id: b9db50805a2b4b21b02608092032eb3c
+run_name: Train vgg16
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1789979199521
+status: 3
+tags: []
+user_id: borisim

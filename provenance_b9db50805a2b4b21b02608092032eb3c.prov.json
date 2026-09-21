@@ -1,0 +1,283 @@
+{
+  "bundle": {
+    "storage:b9db50805a2b4b21b02608092032eb3c": {
+      "prefix": {
+        "storage": "http://localhost:8083/api/v1/documents/",
+        "meta": "http://localhost:8083/api/v1/documents/meta/",
+        "schema": "https://schema.org/",
+        "cpm": "https://www.commonprovenancemodel.org/cpm-namespace-v1-0/",
+        "blank": "https://openprovenance.org/blank/",
+        "xsd": "http://www.w3.org/2001/XMLSchema#",
+        "gen": "gen/",
+        "dct": "http://purl.org/dc/terms/",
+        "prov": "http://www.w3.org/ns/prov#",
+        "sosa": "http://www.w3.org/ns/sosa/"
+      },
+      "entity": {
+        "gen:annotation_params_b9db50805a2b4b21b02608092032eb3c": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Annotation"
+            }
+          ],
+          "prov:annotation": [
+            "{\"input_tiles\": \"mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles\", \"lr\": \"0.001\"}"
+          ]
+        },
+        "gen:model_b9db50805a2b4b21b02608092032eb3c": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Entity"
+            },
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:CreativeWork"
+            }
+          ],
+          "schema:name": [
+            "model of Train vgg16"
+          ],
+          "schema:url": [
+            "file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel"
+          ],
+          "dct:description": [
+            "Trained model produced by Train vgg16 (artifact hint 'mlmodel')"
+          ]
+        },
+        "gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles": {
+          "schema:name": [
+            "mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "sosa:Sample"
+            }
+          ]
+        },
+        "gen:annotation_params_2d8ac7db09cf408cbeb3bc60f54713f4": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Annotation"
+            }
+          ],
+          "prov:annotation": [
+            "{\"n_slides\": \"12\"}"
+          ]
+        },
+        "gen:output_2d8ac7db09cf408cbeb3bc60f54713f4": {
+          "schema:name": [
+            "Create dataset"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "sosa:Sample"
+            }
+          ],
+          "dct:description": [
+            "Output of Create dataset"
+          ],
+          "schema:url": [
+            "file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts"
+          ]
+        },
+        "meta:b9db50805a2b4b21b02608092032eb3c": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:BundleMetadata"
+            }
+          ],
+          "gen:run_name": [
+            "Train vgg16"
+          ],
+          "gen:output_name": [
+            "Train vgg16"
+          ],
+          "cpm:organization": [
+            "RationAI"
+          ],
+          "gen:input_uris": [
+            "[\"mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles\"]"
+          ]
+        },
+        "gen:forward_b9db50805a2b4b21b02608092032eb3c": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:forwardConnector"
+            }
+          ],
+          "schema:name": [
+            "file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel"
+          ],
+          "schema:url": [
+            "file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel"
+          ]
+        }
+      },
+      "activity": {
+        "gen:run_b9db50805a2b4b21b02608092032eb3c": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:Action"
+            }
+          ],
+          "prov:startTime": [
+            "2026-09-21T08:26:39.521000+00:00"
+          ],
+          "prov:endTime": [
+            "2026-09-21T08:26:39.660000+00:00"
+          ],
+          "schema:name": [
+            "Train vgg16"
+          ],
+          "schema:identifier": [
+            "b9db50805a2b4b21b02608092032eb3c"
+          ],
+          "dct:description": [
+            ""
+          ]
+        },
+        "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:Action"
+            }
+          ],
+          "prov:startTime": [
+            "2026-09-21T08:26:39.409000+00:00"
+          ],
+          "prov:endTime": [
+            "2026-09-21T08:26:39.513000+00:00"
+          ],
+          "schema:name": [
+            "Create dataset"
+          ],
+          "schema:identifier": [
+            "2d8ac7db09cf408cbeb3bc60f54713f4"
+          ],
+          "dct:description": [
+            "tile cutting from a VSI directory"
+          ]
+        },
+        "blank:Run_b9db50805a": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:mainActivity"
+            }
+          ],
+          "cpm:referencedMetaBundleId": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "meta:b9db50805a2b4b21b02608092032eb3c"
+            }
+          ],
+          "cpm:referencedMetaspectVersion": [
+            "TODO:referencedMetaspectVersion"
+          ],
+          "dct:hasPart": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "gen:run_b9db50805a2b4b21b02608092032eb3c"
+            },
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4"
+            }
+          ]
+        }
+      },
+      "agent": {
+        "gen:user_borisim": {
+          "schema:name": [
+            "borisim"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:Person"
+            }
+          ],
+          "schema:affiliation": [
+            "RationAI"
+          ]
+        }
+      },
+      "wasAssociatedWith": {
+        "_:n10": {
+          "prov:activity": "gen:run_b9db50805a2b4b21b02608092032eb3c",
+          "prov:agent": "gen:user_borisim"
+        },
+        "_:n11": {
+          "prov:activity": "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4",
+          "prov:agent": "gen:user_borisim"
+        }
+      },
+      "wasAttributedTo": {
+        "_:n0": {
+          "prov:entity": "gen:run_b9db50805a2b4b21b02608092032eb3c",
+          "prov:agent": "gen:user_borisim"
+        },
+        "_:n5": {
+          "prov:entity": "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4",
+          "prov:agent": "gen:user_borisim"
+        }
+      },
+      "wasGeneratedBy": {
+        "_:n2": {
+          "prov:entity": "gen:model_b9db50805a2b4b21b02608092032eb3c",
+          "prov:activity": "gen:run_b9db50805a2b4b21b02608092032eb3c"
+        },
+        "_:n7": {
+          "prov:entity": "gen:output_2d8ac7db09cf408cbeb3bc60f54713f4",
+          "prov:activity": "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4"
+        },
+        "_:n8": {
+          "prov:entity": "gen:forward_b9db50805a2b4b21b02608092032eb3c",
+          "prov:activity": "blank:Run_b9db50805a"
+        }
+      },
+      "used": {
+        "_:n3": {
+          "prov:activity": "gen:run_b9db50805a2b4b21b02608092032eb3c",
+          "prov:entity": "gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles"
+        }
+      },
+      "wasDerivedFrom": {
+        "_:n4": {
+          "prov:entity": "gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles",
+          "prov:derivation": "gen:output_2d8ac7db09cf408cbeb3bc60f54713f4"
+        }
+      },
+      "specializationOf": {
+        "_:n9": {
+          "prov:specificEntity": "gen:forward_b9db50805a2b4b21b02608092032eb3c",
+          "prov:generalEntity": "gen:model_b9db50805a2b4b21b02608092032eb3c"
+        }
+      },
+      "qualifiedAssociation": {
+        "_:n1": {
+          "prov:activity": "gen:run_b9db50805a2b4b21b02608092032eb3c",
+          "prov:annotation": "gen:annotation_params_b9db50805a2b4b21b02608092032eb3c",
+          "prov:annotatedEntity": "gen:run_b9db50805a2b4b21b02608092032eb3c"
+        },
+        "_:n6": {
+          "prov:activity": "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4",
+          "prov:annotation": "gen:annotation_params_2d8ac7db09cf408cbeb3bc60f54713f4",
+          "prov:annotatedEntity": "gen:run_2d8ac7db09cf408cbeb3bc60f54713f4"
+        }
+      }
+    }
+  }
+}

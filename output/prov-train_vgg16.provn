@@ -1,0 +1,42 @@
+document
+  default <http://example.org/0/>
+  prefix gen <gen/>
+  prefix schema <https://schema.org/>
+  prefix dct <http://purl.org/dc/terms/>
+  prefix sosa <http://www.w3.org/ns/sosa/>
+  prefix blank <https://openprovenance.org/blank/>
+  prefix meta <http://localhost:8083/api/v1/documents/meta/>
+  prefix cpm <https://www.commonprovenancemodel.org/cpm-namespace-v1-0/>
+  
+  bundle gen:bundle_b9db50805a2b4b21b02608092032eb3c
+    prefix gen <gen/>
+    prefix schema <https://schema.org/>
+    prefix sosa <http://www.w3.org/ns/sosa/>
+    prefix cpm <https://www.commonprovenancemodel.org/cpm-namespace-v1-0/>
+    prefix meta <http://localhost:8083/api/v1/documents/meta/>
+    prefix blank <https://openprovenance.org/blank/>
+    
+    activity(gen:run_b9db50805a2b4b21b02608092032eb3c, 2026-09-21T08:26:39.521000+00:00, 2026-09-21T08:26:39.660000+00:00, [schema:name="Train vgg16", schema:identifier="b9db50805a2b4b21b02608092032eb3c", dct:description=""])
+    agent(gen:user_borisim, [schema:name="borisim", schema:affiliation="RationAI"])
+    wasAssociatedWith(gen:run_b9db50805a2b4b21b02608092032eb3c, gen:user_borisim, -)
+    wasAttributedTo(gen:run_b9db50805a2b4b21b02608092032eb3c, gen:user_borisim)
+    entity(gen:model_b9db50805a2b4b21b02608092032eb3c, [prov:type='prov:Entity', prov:type='schema:CreativeWork', schema:name="model of Train vgg16", schema:url="file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel", dct:description="Trained model produced by Train vgg16 (artifact hint 'mlmodel')"])
+    wasGeneratedBy(gen:model_b9db50805a2b4b21b02608092032eb3c, gen:run_b9db50805a2b4b21b02608092032eb3c, -)
+    entity(gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles, [schema:name="mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles", schema:url="mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles"])
+    used(gen:run_b9db50805a2b4b21b02608092032eb3c, gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles, -)
+    wasDerivedFrom(gen:input_mlflow_artifacts_160907218636845954_2d8ac7db09cf408cbeb3bc60f54713f4_artifacts_tiles, gen:output_2d8ac7db09cf408cbeb3bc60f54713f4, -, -, -)
+    entity(gen:annotation_params_b9db50805a2b4b21b02608092032eb3c, [prov:type='prov:Annotation', prov:annotation="{\"input_tiles\": \"mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles\", \"lr\": \"0.001\"}", prov:annotatedEntity='gen:run_b9db50805a2b4b21b02608092032eb3c'])
+    activity(gen:run_2d8ac7db09cf408cbeb3bc60f54713f4, 2026-09-21T08:26:39.409000+00:00, 2026-09-21T08:26:39.513000+00:00, [schema:name="Create dataset", schema:identifier="2d8ac7db09cf408cbeb3bc60f54713f4", dct:description="tile cutting from a VSI directory"])
+    agent(gen:user_borisim, [schema:name="borisim", schema:affiliation="RationAI"])
+    wasAssociatedWith(gen:run_2d8ac7db09cf408cbeb3bc60f54713f4, gen:user_borisim, -)
+    wasAttributedTo(gen:run_2d8ac7db09cf408cbeb3bc60f54713f4, gen:user_borisim)
+    entity(gen:output_2d8ac7db09cf408cbeb3bc60f54713f4, [schema:name="Create dataset", prov:type='sosa:Sample', dct:description="Output of Create dataset", schema:url="file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts"])
+    wasGeneratedBy(gen:output_2d8ac7db09cf408cbeb3bc60f54713f4, gen:run_2d8ac7db09cf408cbeb3bc60f54713f4, -)
+    entity(gen:annotation_params_2d8ac7db09cf408cbeb3bc60f54713f4, [prov:type='prov:Annotation', prov:annotation="{\"n_slides\": \"12\"}", prov:annotatedEntity='gen:run_2d8ac7db09cf408cbeb3bc60f54713f4'])
+    entity(meta:b9db50805a2b4b21b02608092032eb3c, [prov:type='cpm:BundleMetadata', gen:run_name="Train vgg16", gen:output_name="Train vgg16", cpm:organization="RationAI", gen:input_uris="[\"mlflow-artifacts:/160907218636845954/2d8ac7db09cf408cbeb3bc60f54713f4/artifacts/tiles\"]"])
+    activity(blank:Run_b9db50805a, -, -, [prov:type='cpm:mainActivity', cpm:referencedMetaBundleId='meta:b9db50805a2b4b21b02608092032eb3c', cpm:referencedMetaspectVersion="TODO:referencedMetaspectVersion", dct:hasPart='gen:run_b9db50805a2b4b21b02608092032eb3c', dct:hasPart='gen:run_2d8ac7db09cf408cbeb3bc60f54713f4'])
+    entity(gen:forward_b9db50805a2b4b21b02608092032eb3c, [schema:name="file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel", schema:url="file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954/b9db50805a2b4b21b02608092032eb3c/artifacts/model/model/MLmodel", prov:type='cpm:forwardConnector'])
+    wasGeneratedBy(gen:forward_b9db50805a2b4b21b02608092032eb3c, blank:Run_b9db50805a, -)
+    specializationOf(gen:forward_b9db50805a2b4b21b02608092032eb3c, gen:model_b9db50805a2b4b21b02608092032eb3c)
+  endBundle
+endDocument

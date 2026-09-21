@@ -1,0 +1,343 @@
+{
+  "bundle": {
+    "storage:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "prefix": {
+        "storage": "http://localhost:8083/api/v1/documents/",
+        "meta": "http://localhost:8083/api/v1/documents/meta/",
+        "schema": "https://schema.org/",
+        "cpm": "https://www.commonprovenancemodel.org/cpm-namespace-v1-0/",
+        "blank": "https://openprovenance.org/blank/",
+        "xsd": "http://www.w3.org/2001/XMLSchema#",
+        "gen": "gen/",
+        "dct": "http://purl.org/dc/terms/",
+        "prov": "http://www.w3.org/ns/prov#",
+        "sosa": "http://www.w3.org/ns/sosa/"
+      },
+      "entity": {
+        "gen:annotation_params_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Annotation"
+            }
+          ],
+          "prov:annotation": [
+            "{\"epochs\": \"50\", \"lr\": \"0.001\"}"
+          ]
+        },
+        "gen:annotation_environment_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Annotation"
+            }
+          ],
+          "prov:annotation": [
+            "{\"model/MLmodel\": {\"sha256\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\", \"size\": 2048}, \"model/weights.pt\": {\"sha256\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\", \"size\": 9000000}}"
+          ]
+        },
+        "gen:model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Entity"
+            },
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:CreativeWork"
+            }
+          ],
+          "schema:name": [
+            "model of Train vgg16"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/model/MLmodel"
+          ],
+          "dct:description": [
+            "Trained model produced by Train vgg16 (artifact hint 'mlmodel')"
+          ]
+        },
+        "gen:input_mlflow_artifacts_1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_artifacts_tiles": {
+          "schema:name": [
+            "mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts/tiles"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts/tiles"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "sosa:Sample"
+            }
+          ]
+        },
+        "gen:input_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs": {
+          "schema:name": [
+            "mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "sosa:Sample"
+            }
+          ]
+        },
+        "gen:annotation_params_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "prov:Annotation"
+            }
+          ],
+          "prov:annotation": [
+            "{\"epochs\": \"50\", \"lr\": \"0.001\"}"
+          ]
+        },
+        "gen:output_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+          "schema:name": [
+            "Tile WSI"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "sosa:Sample"
+            }
+          ],
+          "dct:description": [
+            "Output of Tile WSI"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts"
+          ]
+        },
+        "meta:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:BundleMetadata"
+            }
+          ],
+          "gen:run_name": [
+            "Train vgg16"
+          ],
+          "gen:output_name": [
+            "Train vgg16"
+          ],
+          "cpm:organization": [
+            "RationAI"
+          ],
+          "gen:input_uris": [
+            "[\"mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts/tiles\", \"mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs\"]"
+          ]
+        },
+        "gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:currentConnector"
+            }
+          ],
+          "schema:name": [
+            "mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs"
+          ]
+        },
+        "gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:forwardConnector"
+            }
+          ],
+          "schema:name": [
+            "mlflow-artifacts:/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/model/MLmodel"
+          ],
+          "schema:url": [
+            "mlflow-artifacts:/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/model/MLmodel"
+          ]
+        }
+      },
+      "activity": {
+        "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:Action"
+            }
+          ],
+          "prov:startTime": [
+            "2025-08-12T12:00:00+00:00"
+          ],
+          "prov:endTime": [
+            "2025-08-12T12:06:00+00:00"
+          ],
+          "schema:name": [
+            "Train vgg16"
+          ],
+          "schema:identifier": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "dct:description": [
+            "demo chain"
+          ]
+        },
+        "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:Action"
+            }
+          ],
+          "prov:startTime": [
+            "2025-08-12T12:00:00+00:00"
+          ],
+          "prov:endTime": [
+            "2025-08-12T12:06:00+00:00"
+          ],
+          "schema:name": [
+            "Tile WSI"
+          ],
+          "schema:identifier": [
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          "dct:description": [
+            "demo chain"
+          ]
+        },
+        "blank:Run_aaaaaaaaaa": {
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "cpm:mainActivity"
+            }
+          ],
+          "cpm:referencedMetaBundleId": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "meta:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "cpm:referencedMetaspectVersion": [
+            "TODO:referencedMetaspectVersion"
+          ],
+          "dct:hasPart": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        }
+      },
+      "agent": {
+        "gen:user_u1": {
+          "schema:name": [
+            "u1"
+          ],
+          "prov:type": [
+            {
+              "type": "prov:QUALIFIED_NAME",
+              "$": "schema:Person"
+            }
+          ],
+          "schema:affiliation": [
+            "RationAI"
+          ]
+        }
+      },
+      "wasAssociatedWith": {
+        "_:n15": {
+          "prov:activity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:agent": "gen:user_u1"
+        },
+        "_:n16": {
+          "prov:activity": "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "prov:agent": "gen:user_u1"
+        }
+      },
+      "wasAttributedTo": {
+        "_:n0": {
+          "prov:entity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:agent": "gen:user_u1"
+        },
+        "_:n7": {
+          "prov:entity": "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "prov:agent": "gen:user_u1"
+        }
+      },
+      "wasGeneratedBy": {
+        "_:n3": {
+          "prov:entity": "gen:model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:activity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "_:n9": {
+          "prov:entity": "gen:output_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "prov:activity": "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "_:n12": {
+          "prov:entity": "gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:activity": "blank:Run_aaaaaaaaaa"
+        }
+      },
+      "used": {
+        "_:n4": {
+          "prov:activity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:entity": "gen:input_mlflow_artifacts_1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_artifacts_tiles"
+        },
+        "_:n6": {
+          "prov:activity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:entity": "gen:input_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs"
+        },
+        "_:n10": {
+          "prov:activity": "blank:Run_aaaaaaaaaa",
+          "prov:entity": "gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs"
+        }
+      },
+      "wasDerivedFrom": {
+        "_:n5": {
+          "prov:entity": "gen:input_mlflow_artifacts_1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_artifacts_tiles",
+          "prov:derivation": "gen:output_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "_:n14": {
+          "prov:entity": "gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:derivation": "gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs"
+        }
+      },
+      "specializationOf": {
+        "_:n11": {
+          "prov:specificEntity": "gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs",
+          "prov:generalEntity": "gen:input_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs"
+        },
+        "_:n13": {
+          "prov:specificEntity": "gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:generalEntity": "gen:model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "qualifiedAssociation": {
+        "_:n1": {
+          "prov:activity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:annotation": "gen:annotation_params_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:annotatedEntity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "_:n2": {
+          "prov:activity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:annotation": "gen:annotation_environment_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "prov:annotatedEntity": "gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "_:n8": {
+          "prov:activity": "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "prov:annotation": "gen:annotation_params_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "prov:annotatedEntity": "gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    }
+  }
+}

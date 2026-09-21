@@ -27,6 +27,11 @@ dependencies = [
 
 [dependency-groups]
 dev = ["mypy", "ruff", "pytest"]
+# Provenance graph tool (provenance.py). Kept out of the runtime deps: the
+# library never renders graphs, only the standalone script does.
+# Requires the graphviz `dot` binary on PATH (system package, not installable
+# via pip) for PNG export; PROV-N and the CPM JSON do not need it.
+prov = ["prov[dot]>=3.2"]
 
 [build-system]
 requires = ["setuptools>=77"]

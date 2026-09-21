@@ -1,0 +1,49 @@
+document
+  default <http://example.org/0/>
+  prefix gen <gen/>
+  prefix schema <https://schema.org/>
+  prefix dct <http://purl.org/dc/terms/>
+  prefix sosa <http://www.w3.org/ns/sosa/>
+  prefix blank <https://openprovenance.org/blank/>
+  prefix meta <http://localhost:8083/api/v1/documents/meta/>
+  prefix cpm <https://www.commonprovenancemodel.org/cpm-namespace-v1-0/>
+  
+  bundle gen:bundle_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    prefix gen <gen/>
+    prefix schema <https://schema.org/>
+    prefix sosa <http://www.w3.org/ns/sosa/>
+    prefix cpm <https://www.commonprovenancemodel.org/cpm-namespace-v1-0/>
+    prefix meta <http://localhost:8083/api/v1/documents/meta/>
+    prefix blank <https://openprovenance.org/blank/>
+    
+    activity(gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, 2025-08-12T12:00:00+00:00, 2025-08-12T12:06:00+00:00, [schema:name="Train vgg16", schema:identifier="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", dct:description="demo chain"])
+    agent(gen:user_u1, [schema:name="u1", schema:affiliation="RationAI"])
+    wasAssociatedWith(gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:user_u1, -)
+    wasAttributedTo(gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:user_u1)
+    entity(gen:model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, [prov:type='prov:Entity', prov:type='schema:CreativeWork', schema:name="model of Train vgg16", schema:url="mlflow-artifacts:/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/model/MLmodel", dct:description="Trained model produced by Train vgg16 (artifact hint 'mlmodel')"])
+    wasGeneratedBy(gen:model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, -)
+    entity(gen:input_mlflow_artifacts_1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_artifacts_tiles, [schema:name="mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts/tiles", schema:url="mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts/tiles"])
+    used(gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:input_mlflow_artifacts_1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_artifacts_tiles, -)
+    wasDerivedFrom(gen:input_mlflow_artifacts_1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb_artifacts_tiles, gen:output_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, -, -, -)
+    entity(gen:input_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs, [schema:name="mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs", schema:url="mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs"])
+    used(gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:input_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs, -)
+    entity(gen:annotation_params_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, [prov:type='prov:Annotation', prov:annotation="{\"epochs\": \"50\", \"lr\": \"0.001\"}", prov:annotatedEntity='gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'])
+    entity(gen:annotation_environment_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, [prov:type='prov:Annotation', prov:annotation="{\"model/MLmodel\": {\"sha256\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\", \"size\": 2048}, \"model/w… (+108 chars)", prov:annotatedEntity='gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'])
+    activity(gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, 2025-08-12T12:00:00+00:00, 2025-08-12T12:06:00+00:00, [schema:name="Tile WSI", schema:identifier="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", dct:description="demo chain"])
+    agent(gen:user_u1, [schema:name="u1", schema:affiliation="RationAI"])
+    wasAssociatedWith(gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, gen:user_u1, -)
+    wasAttributedTo(gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, gen:user_u1)
+    entity(gen:output_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, [schema:name="Tile WSI", prov:type='sosa:Sample', dct:description="Output of Tile WSI", schema:url="mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts"])
+    wasGeneratedBy(gen:output_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, -)
+    entity(gen:annotation_params_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb, [prov:type='prov:Annotation', prov:annotation="{\"epochs\": \"50\", \"lr\": \"0.001\"}", prov:annotatedEntity='gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'])
+    entity(meta:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, [prov:type='cpm:BundleMetadata', gen:run_name="Train vgg16", gen:output_name="Train vgg16", cpm:organization="RationAI", gen:input_uris="[\"mlflow-artifacts:/1/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/artifacts/tiles\", \"mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs\"]"])
+    activity(blank:Run_aaaaaaaaaa, -, -, [prov:type='cpm:mainActivity', cpm:referencedMetaBundleId='meta:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', cpm:referencedMetaspectVersion="TODO:referencedMetaspectVersion", dct:hasPart='gen:run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', dct:hasPart='gen:run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'])
+    entity(gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs, [schema:name="mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs", schema:url="mlflow-artifacts:/1/ffffffffffffffffffffffffffffffff/artifacts/wsi.svs", prov:type='cpm:currentConnector'])
+    used(blank:Run_aaaaaaaaaa, gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs, -)
+    specializationOf(gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs, gen:input_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs)
+    entity(gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, [schema:name="mlflow-artifacts:/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/model/MLmodel", schema:url="mlflow-artifacts:/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/model/MLmodel", prov:type='cpm:forwardConnector'])
+    wasGeneratedBy(gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, blank:Run_aaaaaaaaaa, -)
+    specializationOf(gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+    wasDerivedFrom(gen:forward_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, gen:current_mlflow_artifacts_1_ffffffffffffffffffffffffffffffff_artifacts_wsi_svs, -, -, -)
+  endBundle
+endDocument

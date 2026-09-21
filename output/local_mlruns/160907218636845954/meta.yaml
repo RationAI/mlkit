@@ -1,0 +1,9 @@
+artifact_location: file:///home/jovyan/mlkit/output/local_mlruns/160907218636845954
+creation_time: 1789979199290
+effective_trace_archival_retention: null
+experiment_id: '160907218636845954'
+last_update_time: 1789979199290
+lifecycle_stage: active
+name: Training_Pipeline
+trace_location: null
+workspace: default
