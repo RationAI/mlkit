@@ -372,13 +372,21 @@ class Probe:
         return self.client.list_artifacts(run_id, path=path)
 
     def walk_artifacts(self, run_id: str, path: str = ""):
-        """Recursive list of (relative_path, is_dir, size)."""
+        """Recursive list of (path, is_dir, size).
+
+        `a.path` is already the full path from the artifact root, NOT a child
+        name, so it must never be joined onto `path`. Joining produced
+        `environment/environment/uv.lock` — which then failed to download — and,
+        worse, made every nested subtree vanish: `checkpoints/<epoch>/MLmodel`
+        disappeared from the listing entirely, so the trained model looked like
+        it did not exist and the model entity silently degraded to the bare
+        artifact directory.
+        """
         out = []
         for a in self.client.list_artifacts(run_id, path=path or None):
-            p = f"{path}/{a.path}" if path else a.path
-            out.append((p, a.is_dir, a.file_size))
+            out.append((a.path, a.is_dir, a.file_size))
             if a.is_dir:
-                out.extend(self.walk_artifacts(run_id, p))
+                out.extend(self.walk_artifacts(run_id, a.path))
         return out
 
     def download(self, run_id: str, path: str) -> bytes:
@@ -806,6 +814,7 @@ def build_prov_document(
 
     external_inputs = chain_input_uris(chain)
     derived: set[tuple[str, str]] = set()
+    seen_agents: set[str] = set()
     bndl = doc.bundle(f"gen:bundle_{root_id}")
 
     for run_id, info in chain.items():
@@ -824,14 +833,20 @@ def build_prov_document(
                 "prov:endTime": iso(info_.end_time),
             },
         )
+        # one agent node per person, not per run — the relations below are still
+        # per-run, only the declaration is shared. Mirrors agent.setdefault() on
+        # the JSON path; without this an 8-run single-author chain drew the same
+        # person 8 times in the image.
         user = info["user"]
-        bndl.agent(
-            f"gen:user_{user}",
-            other_attributes={
-                "schema:name": user,
-                "schema:affiliation": "RationAI",
-            },
-        )
+        if user not in seen_agents:
+            seen_agents.add(user)
+            bndl.agent(
+                f"gen:user_{user}",
+                other_attributes={
+                    "schema:name": user,
+                    "schema:affiliation": "RationAI",
+                },
+            )
         bndl.wasAssociatedWith(act, f"gen:user_{user}")
         bndl.wasAttributedTo(act, f"gen:user_{user}")
         # output entity — model-typed when this run is the end of the chain and
@@ -871,20 +886,28 @@ def build_prov_document(
         # every attribute into the image; the untruncated JSON is in .prov.json.
         #
         # The JSON links these with prov:qualifiedAssociation, which the prov
-        # package (3.2.2) has no record type for — so the subject is carried as
-        # an attribute here and the edge itself is T5's connector work.
-        for suffix, payload in (
-            ("params", dict(run.data.params)),
-            ("environment", envs.get(run_id) or None),
+        # package (3.2.2) has no record type for. Emitted here as
+        # wasInfluencedBy, the nearest PROV-O relation with a record type, so the
+        # node is actually connected in the image instead of floating free with
+        # only an attribute naming its subject. The attribute stays: it is what
+        # says *which* element the annotation is about, which wasInfluencedBy
+        # (unlike qualifiedAssociation) does not carry.
+        #
+        # Emitted for every run the JSON emits one for — params always (an empty
+        # param dict annotates "{}", still the same node the JSON has),
+        # environment only when that run has an environment artifact dir.
+        for suffix, payload, always in (
+            ("params", dict(run.data.params), True),
+            ("environment", envs.get(run_id), False),
         ):
-            if not payload:
+            if not payload and not always:
                 continue
-            text = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+            text = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
             if len(text) > _MAX_ATTR_CHARS:
                 text = (
                     text[:_MAX_ATTR_CHARS] + f"… (+{len(text) - _MAX_ATTR_CHARS} chars)"
                 )
-            bndl.entity(
+            ann_ent = bndl.entity(
                 f"gen:annotation_{suffix}_{run_id}",
                 other_attributes={
                     "prov:type": _qn_for(doc, "prov:Annotation"),
@@ -892,6 +915,9 @@ def build_prov_document(
                     "prov:annotatedEntity": _qn_for(doc, f"gen:run_{run_id}"),
                 },
             )
+            # annotation direction is run -> annotation: the annotation's content
+            # is derived from the run, not the other way round.
+            bndl.wasInfluencedBy(ann_ent, act)
 
     # ── CPM meta bundle over the chain (was JSON-only) ──
     root = chain[root_id]
