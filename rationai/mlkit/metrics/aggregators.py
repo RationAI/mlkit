@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import numpy as np
 import torch
+from ratiopath.masks.mask_builders import MaskBuilder
 from torch import Tensor, nn
 from torchmetrics import Metric
-
-from rationai.masks import HeatmapAssembler
 
 
 class Aggregator(Metric, ABC):
@@ -97,20 +97,23 @@ class HeatmapAggregator(Aggregator):
         return int(extent_x), int(extent_y)
 
     def _get_heatmap(self) -> Tensor:
+        preds = torch.cat(self.preds)
         xs = torch.cat(self.xs)
         ys = torch.cat(self.ys)
         extent_x, extent_y = self._get_extents(xs, ys)
-        assembler = HeatmapAssembler(
-            extent_x,
-            extent_y,
-            self.extent_tile,
-            self.extent_tile,
-            self.stride_tile,
-            self.stride_tile,
-            device=str(self.preds[0].device) if self.preds else "cpu",
+        mask_builder = MaskBuilder(
+            source_extents=(extent_y, extent_x),
+            source_tile_extent=self.extent_tile,
+            output_tile_extent=1,
+            stride=self.stride_tile,
+            dtype=np.float32,
         )
-        assembler.update(torch.cat(self.preds), xs, ys)
-        return assembler.compute()
+        mask_builder.update_batch(
+            preds.detach().float().reshape(-1, 1).cpu().numpy(),
+            torch.stack([ys, xs], dim=1).cpu().numpy().astype(np.int64),
+        )
+        heatmap = np.asarray(mask_builder.finalize()["mask"][0])
+        return torch.from_numpy(heatmap).to(preds.device)
 
 
 class MeanPoolMaxAggregator(HeatmapAggregator):
