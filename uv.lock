@@ -2305,7 +2305,7 @@ dependencies = [
     { name = "numpy" },
     { name = "openslide-python" },
     { name = "pyarrow" },
-    { name = "ratiopath", extra = ["lightning"] },
+    { name = "ratiopath" },
     { name = "torch" },
 ]
 
@@ -2326,7 +2326,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "openslide-python", specifier = ">=1.4.2" },
     { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "ratiopath", extras = ["lightning"], specifier = ">=1.5.0" },
+    { name = "ratiopath", specifier = ">=1.5.0" },
     { name = "torch", specifier = ">=2.9.1" },
 ]
 
@@ -2361,11 +2361,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/0e/40f651495cf057428d91363ba0ebfa80eaa615ca65f63fb7e59267ffaee7/ratiopath-1.5.0.tar.gz", hash = "sha256:ac1d5cc082776f207f2ba96068ee421ddd9b8357a851235ab7cc0e25a68ebd28", size = 47974, upload-time = "2026-10-20T12:59:50.802Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/bf/0c64567922ad1e44c6bea930e899aa2fb820ca4c182f0549ec7e5545f6e4/ratiopath-1.5.0-py3-none-any.whl", hash = "sha256:b7ea74cdc6594ea487c1d2ad962d4f37c9d04c9af01e5a3931f1662fed744f97", size = 53848, upload-time = "2026-10-20T12:59:49.803Z" },
-]
-
-[package.optional-dependencies]
-lightning = [
-    { name = "lightning" },
 ]
 
 [[package]]
