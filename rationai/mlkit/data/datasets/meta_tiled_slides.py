@@ -9,10 +9,10 @@ from torch.utils.data import ConcatDataset, Dataset
 from rationai.mlkit.data.datasets.slides_tiles_loader import SlidesTilesLoader
 
 
-T = TypeVar("T", covariant=True)
+T_co = TypeVar("T_co", covariant=True)
 
 
-class MetaTiledSlides(ConcatDataset[T], ABC):
+class MetaTiledSlides(ConcatDataset[T_co], ABC):
     """Abstract base class for creating concatenated datasets from slides and tiles.
 
     This class provides a factory method to load and concatenate datasets from different
@@ -73,7 +73,7 @@ class MetaTiledSlides(ConcatDataset[T], ABC):
         return self._meta.filter_tiles_by_slide(slide_id)
 
     @abstractmethod
-    def generate_datasets(self) -> Iterable[Dataset[T]]:
+    def generate_datasets(self) -> Iterable[Dataset[T_co]]:
         """Factory method to generate datasets from slides and tiles.
 
         Example:
