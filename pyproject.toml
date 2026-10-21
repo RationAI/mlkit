@@ -20,7 +20,7 @@ dependencies = [
     "numpy>=2.0",
     "openslide-python>=1.4.2",
     "pyarrow>=23.0.1",
-    "ratiopath>=1.4.2",
+    "ratiopath>=1.5.0",
     "torch>=2.9.1",
 ]
 

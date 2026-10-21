@@ -2326,7 +2326,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.0" },
     { name = "openslide-python", specifier = ">=1.4.2" },
     { name = "pyarrow", specifier = ">=23.0.1" },
-    { name = "ratiopath", specifier = ">=1.4.2" },
+    { name = "ratiopath", specifier = ">=1.5.0" },
     { name = "torch", specifier = ">=2.9.1" },
 ]
 
@@ -2338,7 +2338,7 @@ dev = [
 
 [[package]]
 name = "ratiopath"
-version = "1.4.2"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "albumentationsx" },
@@ -2358,9 +2358,9 @@ dependencies = [
     { name = "torch" },
     { name = "zarr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/38/a9/afbe608b0cc33dc3093bd3afc1e7b995dc1bc2b9a298c171fe43c78c0027/ratiopath-1.4.2.tar.gz", hash = "sha256:880885a2c7a24ded3d0eb9522be60315289a6fe074018555a130dd3479afad25", size = 45043, upload-time = "2026-07-11T18:28:28.82Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/97/0e/40f651495cf057428d91363ba0ebfa80eaa615ca65f63fb7e59267ffaee7/ratiopath-1.5.0.tar.gz", hash = "sha256:ac1d5cc082776f207f2ba96068ee421ddd9b8357a851235ab7cc0e25a68ebd28", size = 47974, upload-time = "2026-10-20T12:59:50.802Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/50/9cec2cca4083323fa850bb343590fe0c414fab1ee33480adaeeac514d280/ratiopath-1.4.2-py3-none-any.whl", hash = "sha256:01ef5c1d61803a5197e318a7295e2ece6edd85314ba7273fc50d7c2c38e41279", size = 51181, upload-time = "2026-07-11T18:28:27.85Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/bf/0c64567922ad1e44c6bea930e899aa2fb820ca4c182f0549ec7e5545f6e4/ratiopath-1.5.0-py3-none-any.whl", hash = "sha256:b7ea74cdc6594ea487c1d2ad962d4f37c9d04c9af01e5a3931f1662fed744f97", size = 53848, upload-time = "2026-10-20T12:59:49.803Z" },
 ]
 
 [[package]]
