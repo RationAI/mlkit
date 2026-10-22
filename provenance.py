@@ -54,13 +54,20 @@ PREFIX = {
     "storage": "http://localhost:8083/api/v1/documents/",
     "meta": "http://localhost:8083/api/v1/documents/meta/",
     "schema": "https://schema.org/",
-    "cpm": "https://www.commonprovenancemodel.org/cpm-namespace-v1-0/",
+    # R1: the CPM namespace is cpm#, per the knowledge base (KB rev. 9).
+    # The cpm-namespace-v1-0/ URI was never answered by the published namespace
+    # page (old finding D) and is not what the KB names.
+    "cpm": "https://www.commonprovenancemodel.org/cpm#",
     "blank": "https://openprovenance.org/blank/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
     "gen": "gen/",
     "dct": "http://purl.org/dc/terms/",
     "prov": "http://www.w3.org/ns/prov#",
     "sosa": "http://www.w3.org/ns/sosa/",
+    # R11 (D-c): params / environment payloads live as attributes under our own
+    # namespace, not as minted prov:* terms. A local namespace for mlkit's own
+    # extensions (see R18: even "gen" is not an absolute IRI yet).
+    "mlkit": "http://rationai.org/prov/mlkit#",
 }
 
 # namespaces registered on the prov document (same pattern as
@@ -76,20 +83,25 @@ NAMESPACE_URIS = {
     "sosa": "http://www.w3.org/ns/sosa/",
     "blank": "https://openprovenance.org/blank/",
     "meta": "http://localhost:8083/api/v1/documents/meta/",
-    "cpm": "https://www.commonprovenancemodel.org/cpm-namespace-v1-0/",
+    # R1: same cpm# correction as in PREFIX above.
+    "cpm": "https://www.commonprovenancemodel.org/cpm#",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
+    # R11 (D-c): matches PREFIX.
+    "mlkit": "http://rationai.org/prov/mlkit#",
 }
 
 # TODO(prov-next-iteration): replace with the real values — PROV_TODO.md T3.
 # These are the two mandatory cpm:mainActivity attributes; the team agreed to
 # carry placeholders rather than block iteration on finalising them. Keep both
 # here so they are greppable and removable in a single edit.
-#   referencedMetaspectVersion has no real source in the repo yet at all.
+#   referencedMetaBundleSpecV (R4: correct spelling per KB) has no real source
+#   in the repo yet; a real value is ISO-[DOC_TYPE]-[PROJECT-CODE]-[PART]:[YEAR].
 #   referencedMetaBundleId is only a fallback: when the bundle's own meta
-#   entity is known, that id is used instead of the placeholder.
+#   entity is known, that id is used instead of the placeholder. (R5, P1: that
+#   value must become a full IRI typed xsd:anyURI, not a qualified name.)
 CPM_PLACEHOLDERS = {
     "cpm:referencedMetaBundleId": "TODO:referencedMetaBundleId",
-    "cpm:referencedMetaspectVersion": "TODO:referencedMetaspectVersion",
+    "cpm:referencedMetaBundleSpecV": "TODO:referencedMetaBundleSpecV",
 }
 
 # CPM backbone terms, spelled exactly as the CPM namespace defines them. Checked
@@ -109,6 +121,9 @@ CPM_PLACEHOLDERS = {
 # object and is deliberately not emitted (see forward_connector_id).
 CPM_CURRENT_CONNECTOR = "cpm:currentConnector"
 CPM_FORWARD_CONNECTOR = "cpm:forwardConnector"
+# R3: the organisation that produced this bundle — required by CPM (KB B.6, F.3)
+# as a cpm:currentAgent, distinct from the individual `gen:user_*` agents.
+CPM_CURRENT_AGENT = "cpm:currentAgent"
 
 # Type of the trained-model entity. `prov:Entity` is the built-in fallback so a
 # consumer that only resolves PROV types still sees an entity;
@@ -155,8 +170,9 @@ def main_activity_props(
         "cpm:referencedMetaBundleId": [
             _qn(meta_id) if meta_id else CPM_PLACEHOLDERS["cpm:referencedMetaBundleId"]
         ],
-        "cpm:referencedMetaspectVersion": [
-            CPM_PLACEHOLDERS["cpm:referencedMetaspectVersion"]
+        # R4: correct attribute name per KB was referencedMetaspectVersion.
+        "cpm:referencedMetaBundleSpecV": [
+            CPM_PLACEHOLDERS["cpm:referencedMetaBundleSpecV"]
         ],
     }
     if has_parts:
@@ -512,8 +528,8 @@ def collect(p: Probe, root_id: str, include_environment: bool = True):
 def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -> dict:
     """Assemble the CPM bundle (JSON-LD dict) for the chain rooted at root_id.
 
-    Full parameters and environment are embedded as prov:Annotation entities
-    (via qualifiedAssociation) characterizing each activity.
+    Full parameters and environment are embedded as mlkit:params /
+    mlkit:environment attributes characterising each activity (R11).
     """
     chain, envs = collect(p, root_id, include_environment)
     # decided once, before the loop: what the end of this chain produces
@@ -531,8 +547,6 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
     was_derived_from: dict = {}
     specialization_of: dict[str, dict[str, str]] = {}
     derived_pairs: set[tuple[str, str]] = set()
-    qualified_association: dict = {}
-    was_attributed_to: dict = {}
     n = 0
 
     for run_id, info in chain.items():
@@ -541,64 +555,43 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
         act = f"gen:run_{run_id}"
         user = info["user"]
 
-        # agent (user) + attribution
+        # agent (user). R12: no wasAttributedTo with an activity as subject —
+        # PROV-CONSTRAINTS keeps entities and activities disjoint, and the
+        # wasAssociatedWith records below already carry the attribution.
+        # R17: typed prov:Person + schema:Person (schema.org alone is not a
+        # PROV type).
         agent.setdefault(
             f"gen:user_{user}",
             {
                 "schema:name": [user],
-                "prov:type": [_qn("schema:Person")],
+                "prov:type": [_qn("prov:Person"), _qn("schema:Person")],
                 "schema:affiliation": ["RationAI"],
             },
         )
-        was_attributed_to[f"_:n{n}"] = {
-            "prov:entity": act,
-            "prov:agent": f"gen:user_{user}",
-        }
-        n += 1
 
-        # activity (the run itself)
+        # activity (the run itself). R11 (D-c): params / environment live as
+        # plain attributes under the mlkit: namespace, characterising the
+        # activity, instead of minted prov:Annotation entities + the
+        # non-PROV qualifiedAssociation section. (R5/P2: full payloads, so no
+        # 120-char truncation like the diagram path — see build_prov_document.)
         tags = run.data.tags or {}
-        activity[act] = {
+        act_attrs: dict[str, list[Any]] = {
             "prov:type": [_qn("schema:Action")],
             "prov:startTime": [iso(info_.start_time)],
             "prov:endTime": [iso(info_.end_time)],
             "schema:name": [info["name"]],
             "schema:identifier": [run_id],
             "dct:description": [tags.get("mlflow.note.content", "")],
-        }
-
-        # all parameters -> prov:Annotation characterizing the activity
-        ann_p = f"gen:annotation_params_{run_id}"
-        entity[ann_p] = {
-            "prov:type": [_qn("prov:Annotation")],
-            "prov:annotation": [
+            "mlkit:params": [
                 json.dumps(dict(run.data.params), ensure_ascii=False, sort_keys=True)
             ],
         }
-        qualified_association[f"_:n{n}"] = {
-            "prov:activity": act,
-            "prov:annotation": ann_p,
-            "prov:annotatedEntity": act,
-        }
-        n += 1
-
-        # environment artifacts -> second prov:Annotation
-        if include_environment:
-            env = envs.get(run_id)
-            if env:
-                ann_e = f"gen:annotation_environment_{run_id}"
-                entity[ann_e] = {
-                    "prov:type": [_qn("prov:Annotation")],
-                    "prov:annotation": [
-                        json.dumps(env, ensure_ascii=False, sort_keys=True)
-                    ],
-                }
-                qualified_association[f"_:n{n}"] = {
-                    "prov:activity": act,
-                    "prov:annotation": ann_e,
-                    "prov:annotatedEntity": act,
-                }
-                n += 1
+        env = envs.get(run_id) if include_environment else None
+        if env:
+            act_attrs["mlkit:environment"] = [
+                json.dumps(env, ensure_ascii=False, sort_keys=True)
+            ]
+        activity[act] = act_attrs
 
         # output entity generated by this activity. On the root run this is the
         # chain's output, so a training run's output is model-typed (T6).
@@ -629,12 +622,18 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
             used[f"_:n{n}"] = {"prov:activity": act, "prov:entity": inp}
             n += 1
             # one derivation per (input, upstream-output) pair — every run
-            # consuming the same artifact URI maps to the same input entity
+            # consuming the same artifact URI maps to the same input entity.
+            # R10: PROV-JSON grammar keys (prov:usedEntity / prov:generatedEntity),
+            # not the lossy prov:entity / prov:derivation the old dialect used.
+            # Generated entity = the direct entity (input artifact), used
+            # entity = the indirect source (the upstream output). Kept in
+            # lockstep with build_prov_document's bndl.wasDerivedFrom(inp, out):
+            # the prov package emits generatedEntity for its FIRST argument.
             if up_id in chain and (uri, up_id) not in derived_pairs:
                 derived_pairs.add((uri, up_id))
                 was_derived_from[f"_:n{n}"] = {
-                    "prov:entity": inp,
-                    "prov:derivation": out_of(up_id),
+                    "prov:generatedEntity": inp,
+                    "prov:usedEntity": out_of(up_id),
                 }
                 n += 1
 
@@ -672,6 +671,19 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
         meta_id, [f"gen:run_{rid}" for rid in chain]
     )
 
+    # R3: cpm:currentAgent — the organisation that produced this bundle (KB
+    # B.6, F.3). Distinct from the individual gen:user_* agents (run authors);
+    # CPM wants the producing organisation associated with the main activity.
+    # cpm:contactIdPid is a placeholder (D-e) pending a real value.
+    org_agent = "gen:org_RationAI"
+    agent[org_agent] = {
+        "prov:type": [_qn(CPM_CURRENT_AGENT), _qn("prov:Organization")],
+        "schema:name": ["RationAI"],
+        "cpm:contactIdPid": ["TODO:contactIdPid"],
+    }
+    # (associated with the main activity in the was_associated block below,
+    # where that dict is built — the org is the producer of the whole chain.)
+
     external_inputs = chain_input_uris(chain)
     # input side: one connector per artifact the chain consumes but does not make
     for uri in external_inputs:
@@ -683,9 +695,12 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
         }
         used[f"_:n{n}"] = {"prov:activity": main_act, "prov:entity": cur}
         n += 1
+        # R2 (KB B.3): the *domain entity* is the specific one, the connector
+        # the general — specializationOf(domain entity, connector). This is the
+        # inverse of the direction T5 first shipped (connector -> domain).
         specialization_of[f"_:n{n}"] = {
-            "prov:specificEntity": cur,
-            "prov:generalEntity": input_entity_id(uri),
+            "prov:specificEntity": input_entity_id(uri),
+            "prov:generalEntity": cur,
         }
         n += 1
 
@@ -700,21 +715,21 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
     }
     was_generated_by[f"_:n{n}"] = {"prov:entity": fwd, "prov:activity": main_act}
     n += 1
+    # R2 (KB B.3): domain entity is the specific one, connector the general.
     specialization_of[f"_:n{n}"] = {
-        "prov:specificEntity": fwd,
-        "prov:generalEntity": out_of(root_id),
+        "prov:specificEntity": out_of(root_id),
+        "prov:generalEntity": fwd,
     }
     n += 1
     # only when the chain really consumed an external input: the derivation says
     # the output was affected by that input, so it must not be asserted blindly.
-    # Field names follow this document's existing wasDerivedFrom convention
-    # (prov:entity / prov:derivation), not PROV-JSON's prov:usedEntity /
-    # prov:generatedEntity — see PROV_TODO.md finding F3 for that pre-existing
-    # divergence; one spelling per document beats a half-correct mix.
+    # R10: PROV-JSON grammar keys. The forward connector is the artifact
+    # generated (first arg), the current connector the input it was affected by
+    # (second arg) — matching bndl.wasDerivedFrom(fwd, cur) on the prov path.
     for uri in external_inputs:
         was_derived_from[f"_:n{n}"] = {
-            "prov:entity": fwd,
-            "prov:derivation": current_connector_id(uri),
+            "prov:generatedEntity": fwd,
+            "prov:usedEntity": current_connector_id(uri),
         }
         n += 1
 
@@ -725,6 +740,10 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
             "prov:agent": f"gen:user_{info['user']}",
         }
         n += 1
+    # R3: the producing organisation is associated with the main activity, not
+    # the individual runs (KB B.6).
+    was_associated[f"_:n{n}"] = {"prov:activity": main_act, "prov:agent": org_agent}
+    n += 1
 
     return {
         "bundle": {
@@ -734,12 +753,10 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
                 "activity": activity,
                 "agent": agent,
                 "wasAssociatedWith": was_associated,
-                "wasAttributedTo": was_attributed_to,
                 "wasGeneratedBy": was_generated_by,
                 "used": used,
                 "wasDerivedFrom": was_derived_from,
                 "specializationOf": specialization_of,
-                "qualifiedAssociation": qualified_association,
             }
         }
     }
@@ -748,6 +765,13 @@ def build_provenance(p: Probe, root_id: str, include_environment: bool = True) -
 # --- prov package document + exports (same way as RationAI/crc_ml-provenance) ---
 
 _MAX_ATTR_CHARS = 120
+
+
+def _truncate(text: str) -> str:
+    """Cap an attribute for the image; prov.dot renders every attribute."""
+    if len(text) > _MAX_ATTR_CHARS:
+        return text[:_MAX_ATTR_CHARS] + f"… (+{len(text) - _MAX_ATTR_CHARS} chars)"
+    return text
 
 
 def _qn_for(doc: prov.model.ProvDocument, name: str) -> prov.model.QualifiedName:
@@ -821,34 +845,53 @@ def build_prov_document(
         run = info["run"]
         info_ = run.info
         # attributes stay small on purpose: prov.dot renders every attribute
-        # (show_element_attributes=True, the repo default) into the image.
-        # Full params/environment JSON lives in the CPM .prov.json instead.
-        act = bndl.activity(
-            f"gen:run_{run_id}",
-            other_attributes={
-                "schema:name": info["name"],
-                "schema:identifier": run_id,
-                "dct:description": (run.data.tags or {}).get("mlflow.note.content", ""),
-                "prov:startTime": iso(info_.start_time),
-                "prov:endTime": iso(info_.end_time),
-            },
-        )
+        # (show_element_attributes=True, the repo default) into the image, so
+        # mlkit:params / mlkit:environment are truncated. Full, untruncated
+        # payloads live in the CPM .prov.json. R11 (D-c): same mlkit:* attribute
+        # scheme as the JSON path — no more gen:annotation_* entities.
+        env = envs.get(run_id) if include_environment else None
+        act_attrs: dict[str, object] = {
+            # prov:type kept identical to the JSON path (schema:Action):
+            # the diagram and the .prov.json must not drift on types.
+            "prov:type": _qn_for(doc, "schema:Action"),
+            "schema:name": info["name"],
+            "schema:identifier": run_id,
+            "dct:description": (run.data.tags or {}).get("mlflow.note.content", ""),
+            "prov:startTime": iso(info_.start_time),
+            "prov:endTime": iso(info_.end_time),
+            "mlkit:params": _truncate(
+                json.dumps(dict(run.data.params), ensure_ascii=False, sort_keys=True)
+            ),
+        }
+        if env:
+            act_attrs["mlkit:environment"] = _truncate(
+                json.dumps(env, ensure_ascii=False, sort_keys=True)
+            )
+        act = bndl.activity(f"gen:run_{run_id}", other_attributes=act_attrs)
         # one agent node per person, not per run — the relations below are still
         # per-run, only the declaration is shared. Mirrors agent.setdefault() on
         # the JSON path; without this an 8-run single-author chain drew the same
-        # person 8 times in the image.
+        # person 8 times in the image. R17: prov:Person + schema:Person, matching
+        # the JSON path (schema.org alone is not a PROV type).
         user = info["user"]
         if user not in seen_agents:
             seen_agents.add(user)
-            bndl.agent(
+            agent_el = bndl.agent(
                 f"gen:user_{user}",
                 other_attributes={
                     "schema:name": user,
                     "schema:affiliation": "RationAI",
                 },
             )
+            # multi-valued prov:type goes through _add_attrs: the constructor
+            # would store the list itself as one value (unhashable in prov)
+            _add_attrs(
+                agent_el,
+                doc,
+                {"prov:type": [_qn("prov:Person"), _qn("schema:Person")]},
+            )
         bndl.wasAssociatedWith(act, f"gen:user_{user}")
-        bndl.wasAttributedTo(act, f"gen:user_{user}")
+        # R12: wasAttributedTo dropped (activity subject is invalid).
         # output entity — model-typed when this run is the end of the chain and
         # trained a model (T6). Same props as the JSON path, so the diagram and
         # the .prov.json cannot drift apart on the node that matters most.
@@ -871,6 +914,8 @@ def build_prov_document(
                 other_attributes={
                     "schema:name": uri,
                     "schema:url": uri,
+                    # prov:type kept identical to the JSON path (sosa:Sample)
+                    "prov:type": _qn_for(doc, "sosa:Sample"),
                 },
             )
             bndl.used(act, inp)
@@ -880,44 +925,6 @@ def build_prov_document(
             if up_id in chain and (uri, up_id) not in derived:
                 derived.add((uri, up_id))
                 bndl.wasDerivedFrom(inp, out_of(up_id))
-
-        # ── annotations (PROV_TODO.md T4: the diagram must not be missing nodes
-        # the JSON has). Truncated to _MAX_ATTR_CHARS because prov.dot renders
-        # every attribute into the image; the untruncated JSON is in .prov.json.
-        #
-        # The JSON links these with prov:qualifiedAssociation, which the prov
-        # package (3.2.2) has no record type for. Emitted here as
-        # wasInfluencedBy, the nearest PROV-O relation with a record type, so the
-        # node is actually connected in the image instead of floating free with
-        # only an attribute naming its subject. The attribute stays: it is what
-        # says *which* element the annotation is about, which wasInfluencedBy
-        # (unlike qualifiedAssociation) does not carry.
-        #
-        # Emitted for every run the JSON emits one for — params always (an empty
-        # param dict annotates "{}", still the same node the JSON has),
-        # environment only when that run has an environment artifact dir.
-        for suffix, payload, always in (
-            ("params", dict(run.data.params), True),
-            ("environment", envs.get(run_id), False),
-        ):
-            if not payload and not always:
-                continue
-            text = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
-            if len(text) > _MAX_ATTR_CHARS:
-                text = (
-                    text[:_MAX_ATTR_CHARS] + f"… (+{len(text) - _MAX_ATTR_CHARS} chars)"
-                )
-            ann_ent = bndl.entity(
-                f"gen:annotation_{suffix}_{run_id}",
-                other_attributes={
-                    "prov:type": _qn_for(doc, "prov:Annotation"),
-                    "prov:annotation": text,
-                    "prov:annotatedEntity": _qn_for(doc, f"gen:run_{run_id}"),
-                },
-            )
-            # annotation direction is run -> annotation: the annotation's content
-            # is derived from the run, not the other way round.
-            bndl.wasInfluencedBy(ann_ent, act)
 
     # ── CPM meta bundle over the chain (was JSON-only) ──
     root = chain[root_id]
@@ -949,6 +956,22 @@ def build_prov_document(
         main_activity_props(meta_id, [f"gen:run_{rid}" for rid in chain]),
     )
 
+    # R3: cpm:currentAgent — the producing organisation (KB B.6), associated
+    # with the main activity. Mirrors the JSON path's gen:org_RationAI.
+    org_el = bndl.agent(
+        "gen:org_RationAI",
+        other_attributes={
+            "schema:name": "RationAI",
+            "cpm:contactIdPid": "TODO:contactIdPid",
+        },
+    )
+    _add_attrs(
+        org_el,
+        doc,
+        {"prov:type": [_qn(CPM_CURRENT_AGENT), _qn("prov:Organization")]},
+    )
+    bndl.wasAssociatedWith(main_act, "gen:org_RationAI")
+
     for uri in external_inputs:
         cur = bndl.entity(
             current_connector_id(uri),
@@ -956,7 +979,8 @@ def build_prov_document(
         )
         _add_attrs(cur, doc, {"prov:type": [_qn(CPM_CURRENT_CONNECTOR)]})
         bndl.used(main_act, cur)
-        bndl.specializationOf(cur, input_entity_id(uri))
+        # R2 (KB B.3): domain entity is the specific one, connector the general.
+        bndl.specializationOf(input_entity_id(uri), cur)
 
     # output side (T6): a plain cpm:forwardConnector, deliberately not the
     # separate "Specialized Forward Connector" object
@@ -966,7 +990,8 @@ def build_prov_document(
     )
     _add_attrs(fwd, doc, {"prov:type": [_qn(CPM_FORWARD_CONNECTOR)]})
     bndl.wasGeneratedBy(fwd, main_act)
-    bndl.specializationOf(fwd, out_of(root_id))
+    # R2 (KB B.3): domain entity is the specific one, connector the general.
+    bndl.specializationOf(out_of(root_id), fwd)
     for uri in external_inputs:
         bndl.wasDerivedFrom(fwd, current_connector_id(uri))
     return doc
@@ -1155,29 +1180,37 @@ def self_check() -> int:
         "activity",
         "agent",
         "wasAssociatedWith",
-        "wasAttributedTo",
         "wasGeneratedBy",
         "used",
         "wasDerivedFrom",
         "specializationOf",
-        "qualifiedAssociation",
     ):
         assert b.get(key), f"missing/empty section {key}"
+    # R12: wasAttributedTo with an activity subject is invalid — it must stay
+    # out, so its absence is asserted rather than left to drift back in.
+    assert "wasAttributedTo" not in b
+    # R11: qualifiedAssociation (non-PROV) and the gen:annotation_* entities are
+    # gone; params / environment now live as mlkit:* attributes on the activity.
+    assert "qualifiedAssociation" not in b
+    assert not any("gen:annotation_" in k for k in b["entity"])
+    assert "mlkit:params" in b["activity"][f"gen:run_{rid_a}"]
     assert f"gen:run_{rid_a}" in b["activity"] and f"gen:run_{rid_b}" in b["activity"]
     assert any("gen:input_" in k for k in b["entity"])
     assert any("gen:output_" in k for k in b["entity"])
-    assert any("gen:annotation_params_" in k for k in b["entity"])
     assert any(k == "gen:user_u1" for k in b["agent"])
-    # exactly ONE derivation record even though two runs consume the URI
+    # R10: PROV-JSON grammar keys, in lockstep with the prov path's
+    # bndl.wasDerivedFrom(inp, out_of(up_id)): generatedEntity is the DIRECT
+    # entity (the input artifact), usedEntity the indirect source (the
+    # upstream output). Exactly ONE record even though two runs consume the URI.
     assert [
         d
         for d in b["wasDerivedFrom"].values()
-        if d.get("prov:derivation") == f"gen:output_{rid_b}"
+        if d.get("prov:usedEntity") == f"gen:output_{rid_b}"
     ] == [
         {
-            "prov:entity": "gen:input_"
+            "prov:generatedEntity": "gen:input_"
             + slug(f"mlflow-artifacts:/1/{rid_b}/artifacts/dataset.csv"),
-            "prov:derivation": f"gen:output_{rid_b}",
+            "prov:usedEntity": f"gen:output_{rid_b}",
         }
     ]
     # ...but two separate `used` relations (one per consumer)
@@ -1205,15 +1238,26 @@ def self_check() -> int:
     } in b["wasGeneratedBy"].values(), "json: main activity generates no connector"
     assert b["entity"][fwd_id]["prov:type"] == [_qn(CPM_FORWARD_CONNECTOR)]
     assert b["entity"][cur_id]["prov:type"] == [_qn(CPM_CURRENT_CONNECTOR)]
-    # specializationOf points at the domain entities, in the right direction
+    # R2: the DOMAIN entity is the specific one, the connector the general —
+    # specializationOf(domain entity, connector). Flipped from the T5 direction.
     assert {
-        "prov:specificEntity": fwd_id,
-        "prov:generalEntity": f"gen:model_{rid_a}",
+        "prov:specificEntity": f"gen:model_{rid_a}",
+        "prov:generalEntity": fwd_id,
     } in b["specializationOf"].values()
     assert {
-        "prov:specificEntity": cur_id,
-        "prov:generalEntity": input_entity_id(svs),
+        "prov:specificEntity": input_entity_id(svs),
+        "prov:generalEntity": cur_id,
     } in b["specializationOf"].values()
+    # R3: the producing organisation (cpm:currentAgent) exists and is associated
+    # with the main activity.
+    assert b["agent"]["gen:org_RationAI"]["prov:type"] == [
+        _qn(CPM_CURRENT_AGENT),
+        _qn("prov:Organization"),
+    ]
+    assert {
+        "prov:activity": main_id,
+        "prov:agent": "gen:org_RationAI",
+    } in b["wasAssociatedWith"].values()
     # T6: the trained model is its own typed, addressable entity
     model_id = f"gen:model_{rid_a}"
     assert model_id in b["entity"], "json: trained-model entity missing"
@@ -1254,25 +1298,29 @@ def self_check() -> int:
     records = bundle.get_records()
     types = [type(r).__name__ for r in records]
     # prov record classes: ProvGeneration=wasGeneratedBy, ProvUsage=used,
-    # ProvDerivation=wasDerivedFrom, ProvAssociation=wasAssociatedWith,
-    # ProvAttribution=wasAttributedTo
+    # ProvDerivation=wasDerivedFrom, ProvAssociation=wasAssociatedWith
     for expected in (
         "ProvGeneration",
         "ProvUsage",
         "ProvDerivation",
         "ProvAssociation",
-        "ProvAttribution",
         # ProvSpecialization is how the backbone template attaches a connector
         # to the domain entity it stands for
         "ProvSpecialization",
     ):
         assert expected in types, f"missing record {expected}"
+    # R12: no attribution records with an activity subject
+    assert "ProvAttribution" not in types
+    # R11: the wasInfluencedBy annotation edges are gone
+    assert "ProvInfluence" not in types
     # 3 consumed (input, derivation) pairs, 2 unique: dataset.csv->rid_b
     # consumed by both rid_a and rid_c collapses to one record; the third is the
     # backbone's forwardConnector -> currentConnector
     assert types.count("ProvDerivation") == 3
     # one per connector: the external input, and the model output
     assert types.count("ProvSpecialization") == 2
+    # R3: one association per run, plus the org agent on the main activity
+    assert types.count("ProvAssociation") == 4
     ents = [r for r in bundle.get_records() if isinstance(r, prov.model.ProvElement)]
     ids = {str(e.identifier): e for e in ents}  # QualifiedName -> "gen:xxx"
     assert f"gen:run_{rid_a}" in ids and f"gen:run_{rid_b}" in ids
@@ -1285,7 +1333,12 @@ def self_check() -> int:
     meta_id = f"meta:{rid_a}"
     assert main_id in ids, f"main activity {main_id} missing from prov document"
     assert meta_id in ids, f"meta bundle {meta_id} missing from prov document"
-    assert f"gen:annotation_params_{rid_a}" in ids, "params annotation missing"
+    # R11: params live as a (truncated) mlkit:params attribute on the activity,
+    # not as a gen:annotation_* entity anymore
+    assert any(
+        "lr" in str(v)
+        for v in ids[f"gen:run_{rid_a}"].get_attribute("mlkit:params") or []
+    ), "diagram: activity missing mlkit:params"
     main_el = ids[main_id]
     assert any(
         "mainActivity" in str(v) for v in main_el.get_attribute("prov:type") or []
@@ -1305,6 +1358,8 @@ def self_check() -> int:
     # ── T2a: one identifier scheme, one construction site ──
     assert main_id == f"blank:Run_{rid_a[:10]}"
     assert "TrainingRun_" not in json.dumps(cpm), "stale TrainingRun_ id spelling"
+    # R4: the KB's spelling, not the misspelling T5 first shipped
+    assert "referencedMetaspectVersion" not in json.dumps(cpm)
 
     # ── T5/T6 parity: the diagram path must carry the same backbone ──
     assert fwd_id in ids, "diagram: forwardConnector missing"
@@ -1346,6 +1401,42 @@ def self_check() -> int:
     assert set(parts) == {
         str(qn) for qn in (main_el.get_attribute("dct:hasPart") or [])
     }, "diagram: hasPart does not match the JSON path"
+
+    # ── P0 acceptance (review): the document must deserialize cleanly and every
+    # derivation must survive with both endpoints intact. This is the review's
+    # own validation method, regression-tested: a serialization bug (non-PROV-JSON
+    # keys, a dropped argument) fails here rather than at the consumer.
+    import io
+
+    buf = io.BytesIO()
+    doc.serialize(buf, format="json")
+    doc_rt = prov.model.ProvDocument.deserialize(content=buf.getvalue().decode(), format="json")
+    assert len(doc_rt.bundles) == 1, "P0: JSON round-trip lost the bundle"
+    recs_rt = list(next(iter(doc_rt.bundles)).get_records())
+    dervs = [r for r in recs_rt if type(r).__name__ == "ProvDerivation"]
+    n_dervs = sum(1 for r in records if type(r).__name__ == "ProvDerivation")
+    assert len(dervs) == n_dervs == 3, (
+        f"P0: derivation count changed on round-trip: {len(dervs)} vs {n_dervs}"
+    )
+    for d in dervs:
+        fa = {str(qn).split(":")[-1]: v for qn, v in getattr(d, "formal_attributes", ())}
+        assert fa.get("generatedEntity") is not None and fa.get("usedEntity") is not None, (
+            f"P0: derivation lost an endpoint on round-trip: {fa}"
+        )
+    # associations must keep their agent too (one per run in the stub chain,
+    # plus the org agent on the main activity)
+    orig_assoc = [r for r in records if type(r).__name__ == "ProvAssociation"]
+    rt_assoc = [r for r in recs_rt if type(r).__name__ == "ProvAssociation"]
+    assert len(rt_assoc) == len(orig_assoc) == 4
+    for r in rt_assoc:
+        agents = [
+            str(v)
+            for qn, v in getattr(r, "formal_attributes", ())
+            if str(qn).endswith("agent")
+        ]
+        assert agents in (["gen:user_u1"], ["gen:org_RationAI"]), (
+            f"P0: association agent lost: {agents}"
+        )
     print("self-check passed")
     return 0
 
