@@ -20,12 +20,12 @@ _DEFAULT_PROV_PREFIXES: dict[str, str] = {
     "storage": "http://localhost:8083/api/v1/documents/",
     "meta": "http://localhost:8083/api/v1/documents/meta/",
     "schema": "https://schema.org/",
-    # R1: CPM namespace is cpm# per the knowledge base (KB rev. 9); the v1-0
-    # URI was not what the KB names. Kept in sync with provenance.py.
-    "cpm": "https://www.commonprovenancemodel.org/cpm#",
+    # CPM namespace per the knowledge base: …/ns/cpm# (the bare cpm# and the
+    # older v1-0 URI were not what the KB names). Kept in sync with provenance.py.
+    "cpm": "https://www.commonprovenancemodel.org/ns/cpm#",
     "blank": "https://openprovenance.org/blank/",
     "xsd": "http://www.w3.org/2001/XMLSchema#",
-    "gen": "gen/",
+    "gen": "http://rationai.org/prov/gen#",
     "dct": "http://purl.org/dc/terms/",
     "prov": "http://www.w3.org/ns/prov#",
     "sosa": "http://www.w3.org/ns/sosa/",
